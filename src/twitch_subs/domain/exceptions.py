@@ -2,11 +2,15 @@ from typing import override
 
 
 class AppException(Exception):
+    """Base application exception."""
+
     def message(self) -> str:
-        return "Occur error in app"
+        return "Application error"
 
 
 class SigTerm(AppException):
+    """Raised when the application receives SIGTERM."""
+
     @override
     def message(self) -> str:
-        return "Got SigTerm"
+        return "Received SIGTERM"
