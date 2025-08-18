@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Iterable, Literal
 
 import httpx
+from dotenv import load_dotenv
 from loguru import logger
 
 # ====== Logging setup =========================================================
@@ -184,7 +185,9 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
     state = load_state()
 
-    logger.info("Starting watch for logins {} with interval {}s", ", ".join(logins), interval)
+    logger.info(
+        "Starting watch for logins {} with interval {}s", ", ".join(logins), interval
+    )
 
     # Одноразовый пинг, чтобы знать, что вотчер запущен
     try:
@@ -261,6 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    load_dotenv()
     argv = argv or sys.argv[1:]
     args = build_parser().parse_args(argv)
     return args.func(args)
