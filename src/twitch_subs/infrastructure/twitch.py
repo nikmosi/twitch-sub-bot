@@ -5,12 +5,13 @@ from typing import Self
 import httpx
 
 from ..domain.models import BroadcasterType, TwitchAppCreds, UserRecord
+from ..domain.ports import TwitchClientProtocol
 
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 TWITCH_USERS_URL = "https://api.twitch.tv/helix/users"
 
 
-class TwitchClient:
+class TwitchClient(TwitchClientProtocol):
     def __init__(self, token: str, cliend_id: str):
         self._token: str = token
         self._client_id = cliend_id

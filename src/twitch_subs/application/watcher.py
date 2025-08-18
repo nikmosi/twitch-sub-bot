@@ -8,9 +8,11 @@ from typing import Iterable
 from loguru import logger
 
 from ..domain.models import BroadcasterType, UserRecord
-from ..infrastructure.state import StateRepository
-from ..infrastructure.telegram import TelegramNotifier
-from ..infrastructure.twitch import TwitchClient
+from ..domain.ports import (
+    NotifierProtocol,
+    StateRepositoryProtocol,
+    TwitchClientProtocol,
+)
 
 
 @dataclass(frozen=True)
@@ -27,9 +29,9 @@ class Watcher:
 
     def __init__(
         self,
-        twitch: TwitchClient,
-        notifier: TelegramNotifier,
-        state_repo: StateRepository,
+        twitch: TwitchClientProtocol,
+        notifier: NotifierProtocol,
+        state_repo: StateRepositoryProtocol,
     ) -> None:
         self.twitch = twitch
         self.notifier = notifier
