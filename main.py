@@ -31,6 +31,11 @@ from pathlib import Path
 from typing import Iterable, Literal
 
 import httpx
+from loguru import logger
+
+# ====== Logging setup =========================================================
+logger.remove()
+logger.add(sys.stderr, level="INFO")
 
 # ====== Константы Twitch =====================================================
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
@@ -118,12 +123,13 @@ def send_telegram_message(
         "parse_mode": "HTML",
     }
     try:
+        logger.info("Sending Telegram message")
         with httpx.Client(timeout=15.0) as c:
             r = c.post(url, json=payload)
             r.raise_for_status()
-    except Exception as e:
-        # Не валим процесс, но сигналим в stderr.
-        print(f"[telegram] send failed: {e}", file=sys.stderr)
+    except Exception:
+        # Не валим процесс, но сигналим
+        logger.exception("Telegram send failed")
 
 
 # ====== State ================================================================
@@ -157,8 +163,11 @@ def check_logins(
     token = get_app_token(creds)
     out: list[tuple[str, BroadcasterType | None, UserRecord | None]] = []
     for login in logins:
+        logger.info("Checking login {}", login)
         u = get_user_by_login(login, creds.client_id, token)
-        out.append((login, None if u is None else u.broadcaster_type, u))
+        btype = None if u is None else u.broadcaster_type
+        logger.info("Login {} status {}", login, btype or "not-found")
+        out.append((login, btype, u))
     return out
 
 
@@ -174,6 +183,8 @@ def cmd_watch(args: argparse.Namespace) -> int:
     tg_chat = _require_env("TELEGRAM_CHAT_ID")
 
     state = load_state()
+
+    logger.info("Starting watch for logins {} with interval {}s", ", ".join(logins), interval)
 
     # Одноразовый пинг, чтобы знать, что вотчер запущен
     try:
@@ -196,6 +207,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
                 if prev != curr:
                     state[login] = curr
                     changed = True
+                    logger.info("Status change for {}: {} -> {}", login, prev, curr)
                     # Уведомляем ТОЛЬКО если новый статус — affiliate или partner
                     if curr in ("affiliate", "partner"):
                         # Формируем заметку
@@ -209,10 +221,12 @@ def cmd_watch(args: argparse.Namespace) -> int:
                         )
                         send_telegram_message(tg_token, tg_chat, text)
             if changed:
+                logger.info("State changed, saving")
                 save_state(state)
             time.sleep(interval)
     except KeyboardInterrupt:
         # Тихо выходим
+        logger.info("Watcher stopped by user")
         return 0
 
     return 0
