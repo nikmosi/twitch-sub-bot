@@ -13,6 +13,7 @@
 docker-compose.yml
 compose.yml
 Dockerfile
+dockerfile
 .docker
 .dockerignore
 
