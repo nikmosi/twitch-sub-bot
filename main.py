@@ -26,6 +26,7 @@ import json
 import os
 import sys
 import time
+import signal
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal
@@ -33,6 +34,13 @@ from typing import Iterable, Literal
 import httpx
 from dotenv import load_dotenv
 from loguru import logger
+
+
+def _handle_sigterm(signum, frame):
+    raise KeyboardInterrupt
+
+
+signal.signal(signal.SIGTERM, _handle_sigterm)
 
 # ====== Logging setup =========================================================
 logger.remove()
