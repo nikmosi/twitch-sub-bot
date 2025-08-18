@@ -67,7 +67,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
         client_secret=require_env("TWITCH_CLIENT_SECRET"),
     )
 
-    twitch = TwitchClient(creds)
+    twitch = TwitchClient.from_creds(creds)
     notifier = TelegramNotifier(tg_token, tg_chat)
     state_repo = StateRepository()
     watcher = Watcher(twitch, notifier, state_repo)

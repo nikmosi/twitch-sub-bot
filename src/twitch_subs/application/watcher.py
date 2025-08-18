@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import threading
 import time
+from dataclasses import dataclass
 from typing import Iterable
+
 from loguru import logger
 
 from ..domain.models import BroadcasterType, UserRecord
@@ -44,7 +45,9 @@ class Watcher:
             statuses.append(LoginStatus(login, btype, user))
         return statuses
 
-    def run_once(self, logins: Iterable[str], state: dict[str, BroadcasterType]) -> bool:
+    def run_once(
+        self, logins: Iterable[str], state: dict[str, BroadcasterType]
+    ) -> bool:
         rows = self.check_logins(logins)
         changed = False
         for status in rows:
@@ -53,7 +56,12 @@ class Watcher:
             if prev != curr:
                 state[status.login] = curr
                 changed = True
-                logger.info("Status change for {}: {} -> {}", status.login, prev.value, curr.value)
+                logger.info(
+                    "Status change for {}: {} -> {}",
+                    status.login,
+                    prev.value,
+                    curr.value,
+                )
                 if curr.is_subscribable():
                     user = status.user
                     display = user.display_name if user else status.login

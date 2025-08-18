@@ -4,18 +4,19 @@ from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import BroadcasterType, UserRecord
 from twitch_subs.infrastructure.state import StateRepository
 from twitch_subs.infrastructure.telegram import TelegramNotifier
+from twitch_subs.infrastructure.twitch import TwitchClient
 
 
 class DummyNotifier(TelegramNotifier):
     def __init__(self) -> None:  # type: ignore[override]
         self.sent: list[str] = []
 
-    def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:  # type: ignore[override]
+    def send_message(self, text: str, _: bool = True) -> None:  # type: ignore[override]
         self.sent.append(text)
 
 
-class DummyTwitch:
-    def __init__(self, users: Dict[str, UserRecord | None]):
+class DummyTwitch(TwitchClient):
+    def __init__(self, users: dict[str, UserRecord | None]):
         self.users = users
 
     def get_user_by_login(self, login: str) -> UserRecord | None:
@@ -44,12 +45,14 @@ def test_check_logins() -> None:
     watcher = Watcher(twitch, notifier, state_repo)
 
     rows = watcher.check_logins(["foo", "bar"])
-    assert rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
+    assert (
+        rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
+    )
     assert rows[1].login == "bar" and rows[1].broadcaster_type is None
 
 
 def test_run_once_updates_state_and_notifies() -> None:
-    users = {
+    users: dict[str, UserRecord | None] = {
         "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE),
     }
     twitch = DummyTwitch(users)

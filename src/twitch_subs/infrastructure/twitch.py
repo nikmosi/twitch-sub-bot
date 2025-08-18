@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from typing import Self
+
 import httpx
-from loguru import logger
 
 from ..domain.models import BroadcasterType, TwitchAppCreds, UserRecord
 
@@ -10,26 +11,28 @@ TWITCH_USERS_URL = "https://api.twitch.tv/helix/users"
 
 
 class TwitchClient:
-    def __init__(self, creds: TwitchAppCreds):
-        self.creds = creds
-        self._token: str | None = None
+    def __init__(self, token: str, cliend_id: str):
+        self._token: str = token
+        self._client_id = cliend_id
 
-    def get_app_token(self) -> str:
-        if self._token is None:
-            data = {
-                "client_id": self.creds.client_id,
-                "client_secret": self.creds.client_secret,
-                "grant_type": "client_credentials",
-            }
-            with httpx.Client(timeout=20.0) as c:
-                r = c.post(TWITCH_TOKEN_URL, data=data)
-                r.raise_for_status()
-                self._token = r.json()["access_token"]
-        return self._token
+    @classmethod
+    def from_creds(cls, creds: TwitchAppCreds) -> Self:
+        data = {
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "grant_type": "client_credentials",
+        }
+        with httpx.Client(timeout=20.0) as c:
+            r = c.post(TWITCH_TOKEN_URL, data=data)
+            r.raise_for_status()
+            token = r.json()["access_token"]
+        return cls(token, creds.client_id)
 
     def get_user_by_login(self, login: str) -> UserRecord | None:
-        token = self.get_app_token()
-        headers = {"Client-Id": self.creds.client_id, "Authorization": f"Bearer {token}"}
+        headers = {
+            "Client-Id": self._client_id,
+            "Authorization": f"Bearer {self._token}",
+        }
         params = {"login": login}
         with httpx.Client(timeout=15.0) as c:
             r = c.get(TWITCH_USERS_URL, headers=headers, params=params)
