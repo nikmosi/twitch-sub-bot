@@ -5,9 +5,10 @@ from pathlib import Path
 from typing import Dict
 
 from ..domain.models import BroadcasterType
+from ..domain.ports import StateRepositoryProtocol
 
 
-class StateRepository:
+class StateRepository(StateRepositoryProtocol):
     def __init__(self, path: Path | None = None):
         self.path = path or Path(".subs_status.json")
 

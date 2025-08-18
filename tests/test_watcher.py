@@ -2,20 +2,22 @@ from typing import Dict
 
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import BroadcasterType, UserRecord
-from twitch_subs.infrastructure.state import StateRepository
-from twitch_subs.infrastructure.telegram import TelegramNotifier
-from twitch_subs.infrastructure.twitch import TwitchClient
+from twitch_subs.domain.ports import (
+    NotifierProtocol,
+    StateRepositoryProtocol,
+    TwitchClientProtocol,
+)
 
 
-class DummyNotifier(TelegramNotifier):
-    def __init__(self) -> None:  # type: ignore[override]
+class DummyNotifier(NotifierProtocol):
+    def __init__(self) -> None:
         self.sent: list[str] = []
 
-    def send_message(self, text: str, _: bool = True) -> None:  # type: ignore[override]
+    def send_message(self, text: str, _: bool = True) -> None:
         self.sent.append(text)
 
 
-class DummyTwitch(TwitchClient):
+class DummyTwitch(TwitchClientProtocol):
     def __init__(self, users: dict[str, UserRecord | None]):
         self.users = users
 
@@ -23,14 +25,14 @@ class DummyTwitch(TwitchClient):
         return self.users.get(login)
 
 
-class DummyState(StateRepository):
+class DummyState(StateRepositoryProtocol):
     def __init__(self) -> None:
         self.data: Dict[str, BroadcasterType] = {}
 
-    def load(self) -> Dict[str, BroadcasterType]:  # type: ignore[override]
+    def load(self) -> Dict[str, BroadcasterType]:
         return self.data
 
-    def save(self, state: Dict[str, BroadcasterType]) -> None:  # type: ignore[override]
+    def save(self, state: Dict[str, BroadcasterType]) -> None:
         self.data = state
 
 

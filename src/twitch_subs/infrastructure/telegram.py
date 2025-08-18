@@ -3,10 +3,12 @@ from __future__ import annotations
 import httpx
 from loguru import logger
 
+from ..domain.ports import NotifierProtocol
+
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
 
-class TelegramNotifier:
+class TelegramNotifier(NotifierProtocol):
     def __init__(self, token: str, chat_id: str):
         self.token = token
         self.chat_id = chat_id
