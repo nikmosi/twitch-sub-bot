@@ -13,7 +13,7 @@ class DummyNotifier(NotifierProtocol):
     def __init__(self) -> None:
         self.sent: list[str] = []
 
-    def send_message(self, text: str, _: bool = True) -> None:
+    def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:
         self.sent.append(text)
 
 
