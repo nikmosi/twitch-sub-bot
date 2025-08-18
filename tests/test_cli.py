@@ -1,5 +1,7 @@
 from typing import Any
 
+from typer.testing import CliRunner
+
 from twitch_subs import cli
 
 
@@ -46,6 +48,10 @@ def test_cli_watch_invokes_watcher(monkeypatch) -> None:
 
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
 
-    assert cli.main(["watch", "foo", "foo", "bar", "--interval", "1"]) == 0
+    runner = CliRunner()
+    result = runner.invoke(
+        cli.app, ["watch", "foo", "foo", "bar", "--interval", "1"]
+    )
+    assert result.exit_code == 0
     assert calls["logins"] == ["foo", "bar"]  # duplicates removed
     assert calls["interval"] == 1

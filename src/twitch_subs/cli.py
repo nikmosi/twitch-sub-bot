@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import argparse
 import sys
 from signal import SIGTERM, signal
 from types import FrameType
 
+import typer
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -16,16 +16,29 @@ from .infrastructure.state import StateRepository
 from .infrastructure.telegram import TelegramNotifier
 from .infrastructure.twitch import TwitchClient
 
+
+app = typer.Typer(
+    name="twitch-subs-checker",
+    help="Watch Twitch logins and notify Telegram when broadcaster_type becomes affiliate/partner",
+)
+
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 
 
+@app.callback()
+def root() -> None:
+    """Root command for twitch-subs-checker."""
+
+
 def handle_sigterm(signum: int, frame: FrameType | None) -> None:
+    """Handle SIGTERM by raising a domain-specific exception."""
     logger.info(f"Got sigterm {signum=}, {frame=}")
     raise SigTerm
 
 
 def at_exit(notifier: TelegramNotifier) -> None:
+    """Send a notification when the watcher stops."""
     logger.info("Watcher stopped by user")
     try:
         notifier.send_message("🔴 <b>Twitch Subs Watcher</b> остановлен.")
@@ -33,30 +46,14 @@ def at_exit(notifier: TelegramNotifier) -> None:
         pass
 
 
-def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
-        prog="twitch-subs-checker",
-        description="Watch Twitch logins and notify Telegram when broadcaster_type becomes affiliate/partner",
-    )
-    sub = p.add_subparsers(dest="cmd", required=True)
+@app.command("watch", help="Watch multiple logins for status changes → Telegram notify")
+def watch(
+    logins: list[str] = typer.Argument(...),
+    interval: int = typer.Option(300, "--interval", help="Poll interval, seconds (default: 300)"),
+) -> None:
+    """Watch Twitch logins and notify Telegram on status changes."""
 
-    p_watch = sub.add_parser(
-        "watch", help="Watch multiple logins for status changes → Telegram notify"
-    )
-    p_watch.add_argument("logins", nargs="+")
-    p_watch.add_argument(
-        "--interval",
-        type=int,
-        default=300,
-        help="Poll interval, seconds (default: 300)",
-    )
-    p_watch.set_defaults(func=cmd_watch)
-    return p
-
-
-def cmd_watch(args: argparse.Namespace) -> int:
-    interval = args.interval
-    logins = list(dict.fromkeys(args.logins))
+    logins = list(dict.fromkeys(logins))
 
     load_dotenv()
 
@@ -79,16 +76,15 @@ def cmd_watch(args: argparse.Namespace) -> int:
 
     try:
         watcher.watch(logins, interval)
-    except SigTerm:
+    except (SigTerm, KeyboardInterrupt):
         at_exit(notifier)
-        return 0
-    except KeyboardInterrupt:
-        at_exit(notifier)
-        return 0
-    return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    argv = argv or sys.argv[1:]
-    args = build_parser().parse_args(argv)
-    return args.func(args)
+def main() -> None:
+    """Entrypoint for the CLI."""
+    app()
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    main()
+
