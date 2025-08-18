@@ -14,6 +14,7 @@ class DummyNotifier(NotifierProtocol):
         self.sent: list[str] = []
 
     def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:
+        _ = disable_web_page_preview
         self.sent.append(text)
 
 
@@ -71,7 +72,9 @@ def test_run_once_updates_state_and_notifies() -> None:
 
 
 def test_run_once_no_change_does_not_notify() -> None:
-    users = {"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)}
+    users: dict[str, UserRecord | None] = {
+        "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
+    }
     twitch = DummyTwitch(users)
     notifier = DummyNotifier()
     state_repo = DummyState()
