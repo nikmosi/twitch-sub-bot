@@ -1,9 +1,6 @@
 from typing import Dict
 
 from twitch_subs.application.watcher import Watcher
-from typing import Dict
-
-from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import BroadcasterType, UserRecord
 from twitch_subs.infrastructure.state import StateRepository
 from twitch_subs.infrastructure.telegram import TelegramNotifier
@@ -47,5 +44,22 @@ def test_check_logins() -> None:
     watcher = Watcher(twitch, notifier, state_repo)
 
     rows = watcher.check_logins(["foo", "bar"])
-    assert rows[0][0] == "foo" and rows[0][1] == BroadcasterType.AFFILIATE
-    assert rows[1][0] == "bar" and rows[1][1] is None
+    assert rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
+    assert rows[1].login == "bar" and rows[1].broadcaster_type is None
+
+
+def test_run_once_updates_state_and_notifies() -> None:
+    users = {
+        "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE),
+    }
+    twitch = DummyTwitch(users)
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    state: Dict[str, BroadcasterType] = {}
+    changed = watcher.run_once(["foo"], state)
+
+    assert changed is True
+    assert state["foo"] == BroadcasterType.AFFILIATE
+    assert notifier.sent
