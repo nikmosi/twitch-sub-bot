@@ -28,11 +28,15 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from signal import SIGTERM, signal
+from types import FrameType
 from typing import Iterable, Literal
 
 import httpx
 from dotenv import load_dotenv
 from loguru import logger
+
+from error import SigTerm
 
 # ====== Logging setup =========================================================
 logger.remove()
@@ -60,8 +64,34 @@ class UserRecord:
     broadcaster_type: BroadcasterType
 
 
+# ====== Signals ==============================================================
+
+
+def handle_sigterm(signum: int, frame: FrameType | None) -> None:
+    logger.info(f"Got sigterm {signum=}, {frame=}")
+    raise SigTerm
+
+
+signal(SIGTERM, handle_sigterm)
+
+
 # ====== Утилиты ==============================================================
 STATE_FILE = Path(".subs_status.json")
+
+
+def at_exit(
+    tg_token: str,
+    tg_chat: str,
+) -> None:
+    logger.info("Watcher stopped by user")
+    try:
+        send_telegram_message(
+            tg_token,
+            tg_chat,
+            "🔴 <b>Twitch Subs Watcher</b> остановлен.",
+        )
+    except Exception:
+        pass
 
 
 def _require_env(name: str) -> str:
@@ -227,17 +257,11 @@ def cmd_watch(args: argparse.Namespace) -> int:
                 logger.info("State changed, saving")
                 save_state(state)
             time.sleep(interval)
+    except SigTerm:
+        at_exit(tg_token, tg_chat)
+        return 0
     except KeyboardInterrupt:
-        # Тихо выходим
-        logger.info("Watcher stopped by user")
-        try:
-            send_telegram_message(
-                tg_token,
-                tg_chat,
-                "🔴 <b>Twitch Subs Watcher</b> остановлен.",
-            )
-        except Exception:
-            pass
+        at_exit(tg_token, tg_chat)
         return 0
 
 

@@ -11,4 +11,4 @@ RUN uv sync --frozen --no-dev
 COPY . .
 
 # Default to running the CLI; additional args can be passed at runtime
-ENTRYPOINT ["uv", "run", "main.py"]
+ENTRYPOINT ["uv", "run", "src/main.py"]
