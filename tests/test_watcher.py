@@ -68,3 +68,17 @@ def test_run_once_updates_state_and_notifies() -> None:
     assert changed is True
     assert state["foo"] == BroadcasterType.AFFILIATE
     assert notifier.sent
+
+
+def test_run_once_no_change_does_not_notify() -> None:
+    users = {"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)}
+    twitch = DummyTwitch(users)
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    state: Dict[str, BroadcasterType] = {"foo": BroadcasterType.AFFILIATE}
+    changed = watcher.run_once(["foo"], state)
+
+    assert changed is False
+    assert not notifier.sent
