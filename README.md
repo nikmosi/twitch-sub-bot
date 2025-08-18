@@ -6,6 +6,7 @@ A small CLI utility that watches a list of Twitch logins and sends a Telegram me
 - Polls Twitch Helix `/users` API and checks the `broadcaster_type`.
 - Persists state in `.subs_status.json` to avoid duplicate notifications.
 - Sends formatted notifications to a Telegram chat using a bot token.
+- Announces start and graceful shutdown in the Telegram chat.
 
 ## Requirements
 - Python 3.12+
