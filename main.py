@@ -232,8 +232,6 @@ def cmd_watch(args: argparse.Namespace) -> int:
         logger.info("Watcher stopped by user")
         return 0
 
-    return 0
-
 
 # ====== Парсер ===============================================================
 
