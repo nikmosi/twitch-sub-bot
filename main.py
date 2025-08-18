@@ -195,7 +195,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
             tg_token,
             tg_chat,
             "🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю: "
-            + ", ".join(f"<code>{l}</code>" for l in logins),
+            + ", ".join(f"<code>{login}</code>" for login in logins),
         )
     except Exception:
         pass
