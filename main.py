@@ -230,6 +230,14 @@ def cmd_watch(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         # Тихо выходим
         logger.info("Watcher stopped by user")
+        try:
+            send_telegram_message(
+                tg_token,
+                tg_chat,
+                "🔴 <b>Twitch Subs Watcher</b> остановлен.",
+            )
+        except Exception:
+            pass
         return 0
 
 
