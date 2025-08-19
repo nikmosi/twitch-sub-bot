@@ -13,12 +13,18 @@ class TelegramNotifier(NotifierProtocol):
         self.token = token
         self.chat_id = chat_id
 
-    def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:
+    def send_message(
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
+    ) -> None:
         url = f"{TELEGRAM_API_BASE}/bot{self.token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
             "text": text,
             "disable_web_page_preview": disable_web_page_preview,
+            "disable_notification": disable_notification,
             "parse_mode": "HTML",
         }
         try:

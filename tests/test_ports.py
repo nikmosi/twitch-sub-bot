@@ -19,16 +19,19 @@ def test_twitch_client_protocol_subclass() -> None:
 def test_notifier_protocol_subclass() -> None:
     class Impl(NotifierProtocol):
         def __init__(self) -> None:  # noqa: D401
-            self.sent: list[tuple[str, bool]] = []
+            self.sent: list[tuple[str, bool, bool]] = []
 
         def send_message(
-            self, text: str, disable_web_page_preview: bool = True
+            self,
+            text: str,
+            disable_web_page_preview: bool = True,
+            disable_notification: bool = False,
         ) -> None:  # noqa: D401
-            self.sent.append((text, disable_web_page_preview))
+            self.sent.append((text, disable_web_page_preview, disable_notification))
 
     impl = Impl()
-    impl.send_message("hi", False)
-    assert impl.sent == [("hi", False)]
+    impl.send_message("hi", False, True)
+    assert impl.sent == [("hi", False, True)]
 
 
 def test_state_repository_protocol_subclass() -> None:

@@ -42,13 +42,16 @@ def test_send_message_builds_request(monkeypatch: MonkeyPatch) -> None:
     client = DummyClient()
     monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     notifier = TelegramNotifier("tok", "chat")
-    notifier.send_message("hello", disable_web_page_preview=False)
+    notifier.send_message(
+        "hello", disable_web_page_preview=False, disable_notification=True
+    )
     assert client.posts
     url, payload = client.posts[0]
     assert url == f"{TELEGRAM_API_BASE}/bot{'tok'}/sendMessage"
     assert payload["chat_id"] == "chat"
     assert payload["text"] == "hello"
     assert payload["disable_web_page_preview"] is False
+    assert payload["disable_notification"] is True
 
 
 def test_send_message_swallow_errors(monkeypatch: MonkeyPatch) -> None:
