@@ -1,11 +1,14 @@
 from typing import Any
 
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 from twitch_subs import cli
+from twitch_subs.infrastructure import watchlist
 
 
-def test_cli_watch_invokes_watcher(monkeypatch) -> None:
+def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
     # Set required environment variables
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
@@ -49,9 +52,11 @@ def test_cli_watch_invokes_watcher(monkeypatch) -> None:
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
 
     runner = CliRunner()
-    result = runner.invoke(
-        cli.app, ["watch", "foo", "foo", "bar", "--interval", "1"]
-    )
+    tmp_watch = tmp_path / "watch.json"
+    watchlist.save(tmp_watch, ["foo", "bar"])
+    monkeypatch.setenv("TWITCH_SUBS_WATCHLIST", str(tmp_watch))
+    result = runner.invoke(cli.app, ["watch", "--interval", "1"])
     assert result.exit_code == 0
-    assert calls["logins"] == ["foo", "bar"]  # duplicates removed
+    assert calls["logins"] == ["bar", "foo"] or calls["logins"] == ["foo", "bar"]
+    assert set(calls["logins"]) == {"foo", "bar"}
     assert calls["interval"] == 1
