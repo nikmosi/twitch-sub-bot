@@ -7,6 +7,8 @@ from typing import Iterable
 
 from loguru import logger
 
+from twitch_subs.application.logins import LoginsProvider
+
 from ..domain.models import BroadcasterType, UserRecord
 from ..domain.ports import (
     NotifierProtocol,
@@ -79,17 +81,17 @@ class Watcher:
 
     def watch(
         self,
-        logins: list[str],
+        logins: LoginsProvider,
         interval: int,
         stop_event: threading.Event | None = None,
     ) -> None:
         state = self.state_repo.load()
         self.notifier.send_message(
             "🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю: "
-            + ", ".join(f"<code>{login}</code>" for login in logins)
+            + ", ".join(f"<code>{login}</code>" for login in logins.get())
         )
         while not (stop_event and stop_event.is_set()):
-            changed = self.run_once(logins, state)
+            changed = self.run_once(logins.get(), state)
             if changed:
                 logger.info("State changed, saving")
                 self.state_repo.save(state)

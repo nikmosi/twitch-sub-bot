@@ -11,6 +11,8 @@ import typer
 from dotenv import load_dotenv
 from loguru import logger
 
+from twitch_subs.infrastructure.logings import WatchListLoginProvider
+
 from .application.watcher import Watcher
 from .domain.exceptions import SigTerm
 from .domain.models import TwitchAppCreds
@@ -97,7 +99,7 @@ def watch(
     )
 
     try:
-        watcher.watch(logins, interval)
+        watcher.watch(WatchListLoginProvider(), interval)
     except (SigTerm, KeyboardInterrupt):
         at_exit(notifier)
 
