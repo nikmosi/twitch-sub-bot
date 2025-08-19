@@ -2,4 +2,4 @@ services:
   bot:
     build: .
     env_file: .env
-    command: ["--help"]
+    command: [ "watch" ]
