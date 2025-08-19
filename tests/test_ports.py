@@ -9,6 +9,7 @@ from twitch_subs.domain.ports import (
 def test_twitch_client_protocol_subclass() -> None:
     class Impl(TwitchClientProtocol):
         def get_user_by_login(self, login: str) -> UserRecord | None:  # noqa: D401
+            _ = login
             return None
 
     impl = Impl()
@@ -20,7 +21,9 @@ def test_notifier_protocol_subclass() -> None:
         def __init__(self) -> None:  # noqa: D401
             self.sent: list[tuple[str, bool]] = []
 
-        def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:  # noqa: D401
+        def send_message(
+            self, text: str, disable_web_page_preview: bool = True
+        ) -> None:  # noqa: D401
             self.sent.append((text, disable_web_page_preview))
 
     impl = Impl()

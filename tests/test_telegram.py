@@ -1,4 +1,7 @@
+from typing import Any
+
 import httpx
+from pytest import MonkeyPatch
 
 from twitch_subs.infrastructure.telegram import (
     TELEGRAM_API_BASE,
@@ -15,23 +18,29 @@ class DummyResponse:
 
 
 class DummyClient:
-    def __init__(self, *args, **kwargs) -> None:
-        self.posts: list[tuple[str, dict]] = []
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        _ = args
+        _ = kwargs
+        self.posts: list[tuple[str, dict[Any, Any]]] = []
 
     def __enter__(self) -> "DummyClient":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # noqa: D401
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:  # noqa: D401
+        _ = exc_type
+        _ = exc
+        _ = tb
+
         pass
 
-    def post(self, url: str, json: dict) -> DummyResponse:
+    def post(self, url: str, json: dict[Any, Any]) -> DummyResponse:
         self.posts.append((url, json))
         return DummyResponse()
 
 
-def test_send_message_builds_request(monkeypatch) -> None:
+def test_send_message_builds_request(monkeypatch: MonkeyPatch) -> None:
     client = DummyClient()
-    monkeypatch.setattr(httpx, "Client", lambda *a, **k: client)
+    monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     notifier = TelegramNotifier("tok", "chat")
     notifier.send_message("hello", disable_web_page_preview=False)
     assert client.posts
@@ -42,20 +51,25 @@ def test_send_message_builds_request(monkeypatch) -> None:
     assert payload["disable_web_page_preview"] is False
 
 
-def test_send_message_swallow_errors(monkeypatch) -> None:
+def test_send_message_swallow_errors(monkeypatch: MonkeyPatch) -> None:
     class FailClient:
-        def __init__(self, *a, **k) -> None:
+        def __init__(self, **_) -> None:
             pass
 
         def __enter__(self) -> "FailClient":
             return self
 
-        def __exit__(self, exc_type, exc, tb) -> None:  # noqa: D401
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:  # noqa: D401
+            _ = exc_type
+            _ = exc
+            _ = tb
             pass
 
-        def post(self, url: str, json: dict) -> None:
+        def post(self, url: str, json: dict[Any, Any]) -> None:
+            _ = url
+            _ = json
             raise httpx.HTTPError("boom")
 
-    monkeypatch.setattr(httpx, "Client", lambda *a, **k: FailClient())
+    monkeypatch.setattr(httpx, "Client", lambda **_: FailClient())  # pyright: ignore
     notifier = TelegramNotifier("tok", "chat")
     notifier.send_message("hi")  # should not raise

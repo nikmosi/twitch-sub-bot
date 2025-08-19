@@ -9,7 +9,9 @@ DEFAULT_PATH = Path(".watchlist.json")
 ENV_VAR = "TWITCH_SUBS_WATCHLIST"
 
 
-def resolve_path(path: Path | None = None, env: Mapping[str, str] | None = None) -> Path:
+def resolve_path(
+    path: Path | None = None, env: Mapping[str, str] | None = None
+) -> Path:
     """Resolve watchlist path from CLI option, env var or default."""
     if path:
         return path.expanduser()
@@ -29,7 +31,7 @@ def load(path: Path) -> list[str]:
         return []
     except json.JSONDecodeError:
         return []
-    users = data.get("users", [])
+    users: list[str] | None = data.get("users", [])
     if not isinstance(users, list):
         return []
     return [str(u) for u in users]

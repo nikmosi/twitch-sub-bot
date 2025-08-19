@@ -1,14 +1,16 @@
-from typing import Any
-
 from pathlib import Path
+from types import NoneType
+from typing import Any, Sequence
 
+from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from twitch_subs import cli
+from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure import watchlist
 
 
-def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
+def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
     # Set required environment variables
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
@@ -21,7 +23,8 @@ def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
     # Provide fake implementations for dependencies
     class DummyTwitch:
         @classmethod
-        def from_creds(cls, creds):  # noqa: D401
+        def from_creds(cls, creds: TwitchAppCreds):  # noqa: D401
+            _ = creds
             return cls()
 
     class DummyNotifier:
@@ -29,7 +32,11 @@ def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
             self.token = token
             self.chat_id = chat_id
 
-        def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:  # noqa: D401
+        def send_message(
+            self, text: str, disable_web_page_preview: bool = True
+        ) -> None:  # noqa: D401
+            _ = text
+            _ = disable_web_page_preview
             pass
 
     class DummyStateRepo:
@@ -37,6 +44,7 @@ def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
             return {}
 
         def save(self, state: dict[str, Any]) -> None:  # noqa: D401
+            _ = state
             pass
 
     monkeypatch.setattr(cli, "TwitchClient", DummyTwitch)
@@ -45,7 +53,14 @@ def test_cli_watch_invokes_watcher(monkeypatch, tmp_path) -> None:
 
     calls: dict[str, Any] = {}
 
-    def fake_watch(self, logins, interval, stop_event=None):  # noqa: D401
+    def fake_watch(
+        self: cli.Watcher,
+        logins: Sequence[str],
+        interval: int,
+        stop_event: NoneType = None,
+    ):  # noqa: D401
+        _ = self
+        _ = stop_event
         calls["logins"] = logins
         calls["interval"] = interval
 

@@ -1,4 +1,9 @@
+# pyright: ignore
+
+from typing import Any
+
 import httpx
+from pytest import MonkeyPatch
 
 from twitch_subs.domain.models import BroadcasterType, TwitchAppCreds
 from twitch_subs.infrastructure.twitch import (
@@ -9,11 +14,11 @@ from twitch_subs.infrastructure.twitch import (
 
 
 class DummyResponse:
-    def __init__(self, data: dict) -> None:
+    def __init__(self, data: dict[Any, Any]) -> None:
         self._data = data
         self.status_checked = False
 
-    def json(self) -> dict:
+    def json(self) -> dict[Any, Any]:
         return self._data
 
     def raise_for_status(self) -> None:
@@ -23,27 +28,35 @@ class DummyResponse:
 class DummyClient:
     def __init__(self, responses: list[DummyResponse]) -> None:
         self.responses = responses
-        self.requests: list[tuple] = []
+        self.requests: list[Any] = []
 
     def __enter__(self) -> "DummyClient":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> None:  # noqa: D401
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:  # noqa: D401
+        _ = exc_type
+        _ = exc
+        _ = tb
         pass
 
-    def post(self, url: str, data: dict | None = None) -> DummyResponse:
+    def post(self, url: str, data: dict[Any, Any] | None = None) -> DummyResponse:
         self.requests.append(("POST", url, data))
         return self.responses.pop(0)
 
-    def get(self, url: str, headers: dict | None = None, params: dict | None = None) -> DummyResponse:
+    def get(
+        self,
+        url: str,
+        headers: dict[Any, Any] | None = None,
+        params: dict[Any, Any] | None = None,
+    ) -> DummyResponse:
         self.requests.append(("GET", url, headers, params))
         return self.responses.pop(0)
 
 
-def test_from_creds_requests_token(monkeypatch) -> None:
+def test_from_creds_requests_token(monkeypatch: MonkeyPatch) -> None:
     responses = [DummyResponse({"access_token": "abc"})]
     client = DummyClient(responses)
-    monkeypatch.setattr(httpx, "Client", lambda *a, **k: client)
+    monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     creds = TwitchAppCreds(client_id="id", client_secret="secret")
     twitch = TwitchClient.from_creds(creds)
     assert isinstance(twitch, TwitchClient)
@@ -52,7 +65,7 @@ def test_from_creds_requests_token(monkeypatch) -> None:
     assert data["client_id"] == "id"
 
 
-def test_get_user_by_login_returns_user(monkeypatch) -> None:
+def test_get_user_by_login_returns_user(monkeypatch: MonkeyPatch) -> None:
     responses = [
         DummyResponse(
             {
@@ -68,7 +81,7 @@ def test_get_user_by_login_returns_user(monkeypatch) -> None:
         )
     ]
     client = DummyClient(responses)
-    monkeypatch.setattr(httpx, "Client", lambda *a, **k: client)
+    monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     twitch = TwitchClient("tok", "id")
     user = twitch.get_user_by_login("foo")
     assert user and user.login == "foo"
@@ -79,10 +92,10 @@ def test_get_user_by_login_returns_user(monkeypatch) -> None:
     assert headers["Authorization"] == "Bearer tok"
 
 
-def test_get_user_by_login_not_found(monkeypatch) -> None:
+def test_get_user_by_login_not_found(monkeypatch: MonkeyPatch) -> None:
     responses = [DummyResponse({"data": []})]
     client = DummyClient(responses)
-    monkeypatch.setattr(httpx, "Client", lambda *a, **k: client)
+    monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     twitch = TwitchClient("tok", "id")
     user = twitch.get_user_by_login("bar")
     assert user is None

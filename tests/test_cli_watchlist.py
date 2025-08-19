@@ -1,19 +1,20 @@
+import json
 from pathlib import Path
 
-import json
+from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from twitch_subs import cli
 from twitch_subs.infrastructure import watchlist
 
 
-def run(command: list[str], monkeypatch, path: Path):
+def run(command: list[str], monkeypatch: MonkeyPatch, path: Path):
     runner = CliRunner()
     monkeypatch.setenv("TWITCH_SUBS_WATCHLIST", str(path))
     return runner.invoke(cli.app, command)
 
 
-def test_add_list_remove_happy(monkeypatch, tmp_path):
+def test_add_list_remove_happy(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = tmp_path / "wl.json"
     res = run(["add", "foo"], monkeypatch, path)
     assert res.exit_code == 0
@@ -23,10 +24,13 @@ def test_add_list_remove_happy(monkeypatch, tmp_path):
     assert res.output.strip() == "foo"
     res = run(["remove", "foo"], monkeypatch, path)
     assert res.exit_code == 0
-    assert run(["list"], monkeypatch, path).output.strip() == "Watchlist is empty. Use 'add' to add usernames."
+    assert (
+        run(["list"], monkeypatch, path).output.strip()
+        == "Watchlist is empty. Use 'add' to add usernames."
+    )
 
 
-def test_idempotent_add(monkeypatch, tmp_path):
+def test_idempotent_add(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = tmp_path / "wl.json"
     run(["add", "foo"], monkeypatch, path)
     run(["add", "foo"], monkeypatch, path)
@@ -34,7 +38,7 @@ def test_idempotent_add(monkeypatch, tmp_path):
     assert data["users"] == ["foo"]
 
 
-def test_remove_missing(monkeypatch, tmp_path):
+def test_remove_missing(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = tmp_path / "wl.json"
     res = run(["remove", "foo"], monkeypatch, path)
     assert res.exit_code != 0
@@ -43,7 +47,7 @@ def test_remove_missing(monkeypatch, tmp_path):
     assert res.exit_code == 0
 
 
-def test_custom_watchlist_option(monkeypatch, tmp_path):
+def test_custom_watchlist_option(tmp_path: Path):
     path = tmp_path / "custom.json"
     runner = CliRunner()
     res = runner.invoke(cli.app, ["add", "foo", "--watchlist", str(path)])
@@ -51,7 +55,7 @@ def test_custom_watchlist_option(monkeypatch, tmp_path):
     assert json.loads(path.read_text())["users"] == ["foo"]
 
 
-def test_username_validation(monkeypatch, tmp_path):
+def test_username_validation(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = tmp_path / "wl.json"
     good = run(["add", "user_1"], monkeypatch, path)
     assert good.exit_code == 0
@@ -59,7 +63,7 @@ def test_username_validation(monkeypatch, tmp_path):
     assert bad.exit_code == 2
 
 
-def test_atomic_write(monkeypatch, tmp_path):
+def test_atomic_write(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = tmp_path / "wl.json"
     res = run(["add", "foo"], monkeypatch, path)
     assert res.exit_code == 0
@@ -68,7 +72,7 @@ def test_atomic_write(monkeypatch, tmp_path):
     assert json.loads(path.read_text())["users"] == ["foo"]
 
 
-def test_default_watchlist_path(monkeypatch, tmp_path):
+def test_default_watchlist_path(monkeypatch: MonkeyPatch, tmp_path: Path):
     monkeypatch.chdir(tmp_path)
     path = watchlist.resolve_path(env={})
     assert path == Path(".watchlist.json")
