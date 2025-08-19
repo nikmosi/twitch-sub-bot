@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -62,6 +63,16 @@ def at_exit(notifier: TelegramNotifier) -> None:
         pass
 
 
+def _get_notifier() -> TelegramNotifier | None:
+    """Return Telegram notifier if credentials are configured."""
+    load_dotenv()
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat = os.getenv("TELEGRAM_CHAT_ID")
+    if token and chat:
+        return TelegramNotifier(token, chat)
+    return None
+
+
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
 def watch(
     interval: int = typer.Option(
@@ -111,11 +122,16 @@ def add(
         None, "--watchlist", help="Path to watchlist file"
     ),
 ) -> None:
+    notifier = _get_notifier()
     for username in usernames:
         path = watchlist.resolve_path(watchlist_path)
         added = watchlist.add(path, username)
         if added:
             typer.echo(f"Added {username}")
+            if notifier:
+                notifier.send_message(
+                    f"➕ <code>{username}</code> добавлен в список наблюдения"
+                )
         else:
             typer.echo(f"{username} already present")
 
@@ -145,11 +161,16 @@ def remove(
         False, "--quiet", "-q", help="Exit 0 even if username was absent"
     ),
 ) -> None:
+    notifier = _get_notifier()
     for username in usernames:
         path = watchlist.resolve_path(watchlist_path)
         removed = watchlist.remove(path, username)
         if removed:
             typer.echo(f"Removed {username}")
+            if notifier:
+                notifier.send_message(
+                    f"➖ <code>{username}</code> удален из списка наблюдения"
+                )
             return
         if quiet:
             raise typer.Exit(0)

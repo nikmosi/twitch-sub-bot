@@ -1,11 +1,12 @@
 from pathlib import Path
 from types import NoneType
-from typing import Any
+from typing import Any, Sequence
 
 from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from twitch_subs import cli
+from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure import watchlist
 
@@ -59,7 +60,7 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
     def fake_watch(
         self: cli.Watcher,
-        logins: Any,
+        logins: LoginsProvider | Sequence[str],
         interval: int,
         stop_event: NoneType = None,
         report_interval: int = 86400,
@@ -67,7 +68,7 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         _ = self
         _ = stop_event
         _ = report_interval
-        calls["logins"] = logins.get() if hasattr(logins, "get") else logins
+        calls["logins"] = logins.get() if isinstance(logins, LoginsProvider) else logins
         calls["interval"] = interval
 
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
