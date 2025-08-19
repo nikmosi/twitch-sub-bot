@@ -77,3 +77,38 @@ def test_default_watchlist_path(monkeypatch: MonkeyPatch, tmp_path: Path):
     path = watchlist.resolve_path(env={})
     assert path == Path(".watchlist.json")
     assert path.resolve() == tmp_path / ".watchlist.json"
+
+
+def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
+    path = tmp_path / "wl.json"
+    messages: list[str] = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
+    monkeypatch.setattr(cli, "load_dotenv", lambda: None)
+
+    def fake_send(self, text: str, disable_web_page_preview: bool = True) -> None:
+        _ = disable_web_page_preview
+        messages.append(text)
+
+    monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
+    res = run(["add", "foo"], monkeypatch, path)
+    assert res.exit_code == 0
+    assert messages == ["➕ <code>foo</code> добавлен в список наблюдения"]
+
+
+def test_remove_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
+    path = tmp_path / "wl.json"
+    watchlist.save(path, ["foo"])
+    messages: list[str] = []
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
+    monkeypatch.setattr(cli, "load_dotenv", lambda: None)
+
+    def fake_send(self, text: str, disable_web_page_preview: bool = True) -> None:
+        _ = disable_web_page_preview
+        messages.append(text)
+
+    monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
+    res = run(["remove", "foo"], monkeypatch, path)
+    assert res.exit_code == 0
+    assert messages == ["➖ <code>foo</code> удален из списка наблюдения"]
