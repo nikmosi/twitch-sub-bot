@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 from signal import SIGTERM, signal
 from types import FrameType
+from typing import Sequence
 
 import typer
 from dotenv import load_dotenv
@@ -13,12 +14,11 @@ from loguru import logger
 from .application.watcher import Watcher
 from .domain.exceptions import SigTerm
 from .domain.models import TwitchAppCreds
+from .infrastructure import watchlist
 from .infrastructure.env import require_env
 from .infrastructure.state import StateRepository
 from .infrastructure.telegram import TelegramNotifier
 from .infrastructure.twitch import TwitchClient
-from .infrastructure import watchlist
-
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -31,12 +31,13 @@ logger.add(sys.stderr, level="INFO")
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,25}$", re.ASCII)
 
 
-def validate_username(value: str) -> str:
+def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     """Validate *value* as a Twitch username or exit with code 2."""
-    if not USERNAME_RE.fullmatch(value):
-        typer.echo("Invalid username format", err=True)
-        raise typer.Exit(2)
-    return value
+    for value in names:
+        if not USERNAME_RE.fullmatch(value):
+            typer.echo("Invalid username format", err=True)
+            raise typer.Exit(2)
+    return names
 
 
 @app.callback()
@@ -103,17 +104,18 @@ def watch(
 
 @app.command("add", help="Add a Twitch username to the watchlist")
 def add(
-    username: str = typer.Argument(..., callback=validate_username),
+    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
     watchlist_path: Path | None = typer.Option(
         None, "--watchlist", help="Path to watchlist file"
     ),
 ) -> None:
-    path = watchlist.resolve_path(watchlist_path)
-    added = watchlist.add(path, username)
-    if added:
-        typer.echo(f"Added {username}")
-    else:
-        typer.echo(f"{username} already present")
+    for username in usernames:
+        path = watchlist.resolve_path(watchlist_path)
+        added = watchlist.add(path, username)
+        if added:
+            typer.echo(f"Added {username}")
+        else:
+            typer.echo(f"{username} already present")
 
 
 @app.command("list", help="List Twitch usernames in watchlist")
@@ -133,7 +135,7 @@ def list_cmd(
 
 @app.command("remove", help="Remove a Twitch username from the watchlist")
 def remove(
-    username: str = typer.Argument(..., callback=validate_username),
+    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
     watchlist_path: Path | None = typer.Option(
         None, "--watchlist", help="Path to watchlist file"
     ),
@@ -141,15 +143,16 @@ def remove(
         False, "--quiet", "-q", help="Exit 0 even if username was absent"
     ),
 ) -> None:
-    path = watchlist.resolve_path(watchlist_path)
-    removed = watchlist.remove(path, username)
-    if removed:
-        typer.echo(f"Removed {username}")
-        return
-    if quiet:
-        raise typer.Exit(0)
-    typer.echo(f"{username} not found", err=True)
-    raise typer.Exit(1)
+    for username in usernames:
+        path = watchlist.resolve_path(watchlist_path)
+        removed = watchlist.remove(path, username)
+        if removed:
+            typer.echo(f"Removed {username}")
+            return
+        if quiet:
+            raise typer.Exit(0)
+        typer.echo(f"{username} not found", err=True)
+        raise typer.Exit(1)
 
 
 def main() -> None:
@@ -159,4 +162,3 @@ def main() -> None:
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     main()
-
