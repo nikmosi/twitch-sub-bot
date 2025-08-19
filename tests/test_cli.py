@@ -1,6 +1,6 @@
 from pathlib import Path
 from types import NoneType
-from typing import Any, Sequence
+from typing import Any
 
 from pytest import MonkeyPatch
 from typer.testing import CliRunner
@@ -33,10 +33,14 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
             self.chat_id = chat_id
 
         def send_message(
-            self, text: str, disable_web_page_preview: bool = True
+            self,
+            text: str,
+            disable_web_page_preview: bool = True,
+            disable_notification: bool = False,
         ) -> None:  # noqa: D401
             _ = text
             _ = disable_web_page_preview
+            _ = disable_notification
             pass
 
     class DummyStateRepo:
@@ -55,13 +59,15 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
     def fake_watch(
         self: cli.Watcher,
-        logins: Sequence[str],
+        logins: Any,
         interval: int,
         stop_event: NoneType = None,
+        report_interval: int = 86400,
     ):  # noqa: D401
         _ = self
         _ = stop_event
-        calls["logins"] = logins
+        _ = report_interval
+        calls["logins"] = logins.get() if hasattr(logins, "get") else logins
         calls["interval"] = interval
 
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)

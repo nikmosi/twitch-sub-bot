@@ -10,7 +10,12 @@ class TwitchClientProtocol(Protocol):
 
 
 class NotifierProtocol(Protocol):
-    def send_message(self, text: str, disable_web_page_preview: bool = True) -> None: ...
+    def send_message(
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
+    ) -> None: ...
 
 
 class StateRepositoryProtocol(Protocol):

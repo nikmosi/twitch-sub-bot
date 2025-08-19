@@ -11,11 +11,16 @@ from twitch_subs.domain.ports import (
 
 class DummyNotifier(NotifierProtocol):
     def __init__(self) -> None:
-        self.sent: list[str] = []
+        self.sent: list[tuple[str, bool]] = []
 
-    def send_message(self, text: str, disable_web_page_preview: bool = True) -> None:
+    def send_message(
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
+    ) -> None:
         _ = disable_web_page_preview
-        self.sent.append(text)
+        self.sent.append((text, disable_notification))
 
 
 class DummyTwitch(TwitchClientProtocol):
@@ -85,3 +90,18 @@ def test_run_once_no_change_does_not_notify() -> None:
 
     assert changed is False
     assert not notifier.sent
+
+
+def test_report_sends_daily_summary() -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+    state: Dict[str, BroadcasterType] = {"foo": BroadcasterType.AFFILIATE}
+    watcher.report(["foo"], state, checks=5, errors=2)
+    assert notifier.sent
+    text, silent = notifier.sent[0]
+    assert "Checks: <b>5</b>" in text
+    assert "Errors: <b>2</b>" in text
+    assert "foo" in text
+    assert silent is True
