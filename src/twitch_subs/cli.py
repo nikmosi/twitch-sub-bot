@@ -20,7 +20,7 @@ from .domain.models import TwitchAppCreds
 from .infrastructure import watchlist
 from .infrastructure.env import require_env
 from .infrastructure.state import StateRepository
-from .infrastructure.telegram import TelegramNotifier
+from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 from .infrastructure.twitch import TwitchClient
 
 app = typer.Typer(
@@ -176,6 +176,24 @@ def remove(
             raise typer.Exit(0)
         typer.echo(f"{username} not found", err=True)
         raise typer.Exit(1)
+
+
+@app.command("bot", help="Run Telegram bot to manage the watchlist")
+def bot_cmd(
+    watchlist_path: Path | None = typer.Option(
+        None, "--watchlist", help="Path to watchlist file"
+    ),
+) -> None:
+    path = watchlist.resolve_path(watchlist_path)
+    load_dotenv()
+    token = require_env("TELEGRAM_BOT_TOKEN")
+    bot = TelegramWatchlistBot(token, path)
+    offset: int | None = None
+    try:
+        while True:
+            offset = bot.poll(offset)
+    except KeyboardInterrupt:
+        typer.echo("Bot stopped")
 
 
 def main() -> None:
