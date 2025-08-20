@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import httpx
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
 from loguru import logger
 
 from ..domain.ports import NotifierProtocol
@@ -40,58 +43,66 @@ class TelegramNotifier(NotifierProtocol):
 
 
 class TelegramWatchlistBot:
-    """Minimal Telegram bot to manage the watchlist."""
+    """Telegram bot to manage the watchlist using aiogram."""
 
     def __init__(self, token: str, path: Path | None = None) -> None:
-        self.token = token
         self.path = watchlist.resolve_path(path)
+        self.bot = Bot(token=token)
+        self.dispatcher = Dispatcher()
 
-    def _api_url(self, method: str) -> str:
-        return f"{TELEGRAM_API_BASE}/bot{self.token}/{method}"
+        self.dispatcher.message.register(self._cmd_add, Command("add"))
+        self.dispatcher.message.register(self._cmd_remove, Command("remove"))
+        self.dispatcher.message.register(self._cmd_list, Command("list"))
 
-    def _send_message(self, chat_id: int, text: str) -> None:
-        payload = {"chat_id": chat_id, "text": text}
-        try:
-            with httpx.Client(timeout=15.0) as c:
-                r = c.post(self._api_url("sendMessage"), json=payload)
-                r.raise_for_status()
-        except Exception:
-            logger.exception("Telegram send failed")
+    # ----- pure helpers used by handlers and tests -----
+    def _handle_add(self, username: str) -> str:
+        if watchlist.add(self.path, username):
+            return f"Added {username}"
+        return f"{username} already present"
+
+    def _handle_remove(self, username: str) -> str:
+        if watchlist.remove(self.path, username):
+            return f"Removed {username}"
+        return f"{username} not found"
+
+    def _handle_list(self) -> str:
+        users = watchlist.load(self.path)
+        if users:
+            return "\n".join(users)
+        return "Watchlist is empty"
 
     def handle_command(self, text: str) -> str:
         parts = text.strip().split(maxsplit=1)
         cmd = parts[0]
         arg = parts[1].strip() if len(parts) > 1 else None
         if cmd == "/add" and arg:
-            if watchlist.add(self.path, arg):
-                return f"Added {arg}"
-            return f"{arg} already present"
+            return self._handle_add(arg)
         if cmd == "/remove" and arg:
-            if watchlist.remove(self.path, arg):
-                return f"Removed {arg}"
-            return f"{arg} not found"
+            return self._handle_remove(arg)
         if cmd == "/list" and not arg:
-            users = watchlist.load(self.path)
-            if users:
-                return "\n".join(users)
-            return "Watchlist is empty"
+            return self._handle_list()
         return "Unknown command"
 
-    def poll(self, offset: int | None = None) -> int | None:
-        params: dict[str, int] = {"timeout": 25}
-        if offset is not None:
-            params["offset"] = offset
-        with httpx.Client(timeout=30.0) as c:
-            r = c.get(self._api_url("getUpdates"), params=params)
-            r.raise_for_status()
-            data = r.json()
-        for update in data.get("result", []):
-            offset = update["update_id"] + 1
-            message = update.get("message") or {}
-            text = message.get("text")
-            chat_id = (message.get("chat") or {}).get("id")
-            if not text or chat_id is None:
-                continue
-            reply = self.handle_command(text)
-            self._send_message(chat_id, reply)
-        return offset
+    # ----- aiogram command handlers -----
+    async def _cmd_add(self, message: types.Message) -> None:
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) < 2:
+            await message.answer("Usage: /add <username>")
+            return
+        await message.answer(self._handle_add(parts[1].strip()))
+
+    async def _cmd_remove(self, message: types.Message) -> None:
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) < 2:
+            await message.answer("Usage: /remove <username>")
+            return
+        await message.answer(self._handle_remove(parts[1].strip()))
+
+    async def _cmd_list(self, message: types.Message) -> None:
+        await message.answer(self._handle_list())
+
+    async def run(self) -> None:
+        await self.dispatcher.start_polling(self.bot)
+
+    def run_polling(self) -> None:
+        asyncio.run(self.run())

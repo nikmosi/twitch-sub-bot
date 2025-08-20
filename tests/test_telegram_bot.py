@@ -6,7 +6,7 @@ from twitch_subs.infrastructure import watchlist
 
 def test_bot_add_remove_list(tmp_path: Path) -> None:
     path = tmp_path / "watchlist.json"
-    bot = TelegramWatchlistBot("token", path)
+    bot = TelegramWatchlistBot("123:ABC", path)
 
     assert bot.handle_command("/list") == "Watchlist is empty"
 
@@ -22,7 +22,7 @@ def test_bot_add_remove_list(tmp_path: Path) -> None:
 
 def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
     path = tmp_path / "watchlist.json"
-    bot = TelegramWatchlistBot("token", path)
+    bot = TelegramWatchlistBot("123:ABC", path)
     bot.handle_command("/add foo")
 
     assert bot.handle_command("/add foo") == "foo already present"
