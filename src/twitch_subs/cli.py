@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import sys
@@ -188,10 +189,8 @@ def bot_cmd(
     load_dotenv()
     token = require_env("TELEGRAM_BOT_TOKEN")
     bot = TelegramWatchlistBot(token, path)
-    offset: int | None = None
     try:
-        while True:
-            offset = bot.poll(offset)
+        asyncio.run(bot.run())
     except KeyboardInterrupt:
         typer.echo("Bot stopped")
 
