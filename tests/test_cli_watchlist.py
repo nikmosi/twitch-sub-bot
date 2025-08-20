@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 from pytest import MonkeyPatch
 from typer.testing import CliRunner
@@ -86,7 +87,8 @@ def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
     monkeypatch.setattr(cli, "load_dotenv", lambda: None)
 
-    def fake_send(self, text: str, disable_web_page_preview: bool = True) -> None:
+    def fake_send(self: Any, text: str, disable_web_page_preview: bool = True) -> None:
+        _ = self
         _ = disable_web_page_preview
         messages.append(text)
 
@@ -104,7 +106,8 @@ def test_remove_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
     monkeypatch.setattr(cli, "load_dotenv", lambda: None)
 
-    def fake_send(self, text: str, disable_web_page_preview: bool = True) -> None:
+    def fake_send(self: Any, text: str, disable_web_page_preview: bool = True) -> None:
+        _ = self
         _ = disable_web_page_preview
         messages.append(text)
 

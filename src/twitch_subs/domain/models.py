@@ -5,7 +5,7 @@ from enum import Enum
 
 
 class BroadcasterType(str, Enum):
-    NONE = ""
+    NONE = "None"
     AFFILIATE = "affiliate"
     PARTNER = "partner"
 

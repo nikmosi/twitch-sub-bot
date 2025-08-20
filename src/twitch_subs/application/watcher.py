@@ -56,6 +56,7 @@ class Watcher:
         changed = False
         for status in rows:
             prev = state.get(status.login, BroadcasterType.NONE)
+            assert prev is not None
             curr = status.broadcaster_type or BroadcasterType.NONE
             if prev != curr:
                 state[status.login] = curr
@@ -91,7 +92,9 @@ class Watcher:
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
         for login in logins:
-            btype = state.get(login, BroadcasterType.NONE).value
+            broadcastertype = state.get(login, BroadcasterType.NONE)
+            assert broadcastertype is not None
+            btype = broadcastertype.value
             text.append(f"• <code>{login}</code>: <b>{btype}</b>")
         self.notifier.send_message("\n".join(text), disable_notification=True)
 
