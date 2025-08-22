@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import List
+from typing import Any, cast
 
 from sqlalchemy import (
     Column,
+    CursorResult,
     MetaData,
     String,
     Table,
@@ -47,11 +48,11 @@ class SqliteWatchlistRepository(WatchlistRepository):
     def remove(self, login: str) -> bool:
         with Session(self.engine) as session:
             stmt = delete(watchlist).where(watchlist.c.login == login)
-            result = session.execute(stmt)
+            result = cast(CursorResult[Any], session.execute(stmt))  # pyright: ignore
             session.commit()
             return result.rowcount > 0
 
-    def list(self) -> List[str]:
+    def list(self) -> list[str]:
         with Session(self.engine) as session:
             stmt = select(watchlist.c.login).order_by(watchlist.c.login.asc())
             rows = session.execute(stmt).scalars().all()
