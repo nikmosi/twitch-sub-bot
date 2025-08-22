@@ -28,15 +28,19 @@ class WatchlistRepository(Protocol):
 
     def add(self, login: str) -> None:
         """Add *login* to the watchlist. Idempotent."""
+        ...
 
     def remove(self, login: str) -> bool:
         """Remove *login* from the watchlist.
 
         Returns ``True`` if the login was present and removed.
         """
+        ...
 
     def list(self) -> list[str]:
         """Return all logins from the watchlist sorted alphabetically."""
+        ...
 
     def exists(self, login: str) -> bool:
         """Return ``True`` if *login* is already in the watchlist."""
+        ...
