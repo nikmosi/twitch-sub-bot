@@ -120,6 +120,7 @@ def add(
     watchlist_path: Path | None = typer.Option(
         None, "--watchlist", help="Path to watchlist file"
     ),
+    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     notifier = _get_notifier()
     for username in usernames:
@@ -127,7 +128,7 @@ def add(
         added = watchlist.add(path, username)
         if added:
             typer.echo(f"Added {username}")
-            if notifier:
+            if notifier and notify:
                 notifier.send_message(
                     f"➕ <code>{username}</code> добавлен в список наблюдения"
                 )
@@ -159,6 +160,7 @@ def remove(
     quiet: bool = typer.Option(
         False, "--quiet", "-q", help="Exit 0 even if username was absent"
     ),
+    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     notifier = _get_notifier()
     for username in usernames:
@@ -166,7 +168,7 @@ def remove(
         removed = watchlist.remove(path, username)
         if removed:
             typer.echo(f"Removed {username}")
-            if notifier:
+            if notifier and notify:
                 notifier.send_message(
                     f"➖ <code>{username}</code> удален из списка наблюдения"
                 )
