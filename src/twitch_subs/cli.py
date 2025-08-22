@@ -16,10 +16,10 @@ from loguru import logger
 from twitch_subs.infrastructure.logings import WatchListLoginProvider
 
 from .application.watcher import Watcher
+from .config import Settings
 from .domain.exceptions import SigTerm
 from .domain.models import TwitchAppCreds
 from .infrastructure import watchlist
-from .infrastructure.env import require_env
 from .infrastructure.state import StateRepository
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 from .infrastructure.twitch import TwitchClient
@@ -91,14 +91,14 @@ def watch(
         typer.echo("Watchlist is empty", err=True)
         raise typer.Exit(1)
 
-    load_dotenv()
-
-    tg_token = require_env("TELEGRAM_BOT_TOKEN")
-    tg_chat = require_env("TELEGRAM_CHAT_ID")
+    settings = Settings()
     creds = TwitchAppCreds(
-        client_id=require_env("TWITCH_CLIENT_ID"),
-        client_secret=require_env("TWITCH_CLIENT_SECRET"),
+        client_id=settings.twitch_client_id,
+        client_secret=settings.twitch_client_secret,
     )
+
+    tg_token = settings.telegram_bot_token
+    tg_chat = settings.telegram_chat_id
 
     twitch = TwitchClient.from_creds(creds)
     notifier = TelegramNotifier(tg_token, tg_chat)
@@ -186,8 +186,7 @@ def bot_cmd(
     ),
 ) -> None:
     path = watchlist.resolve_path(watchlist_path)
-    load_dotenv()
-    token = require_env("TELEGRAM_BOT_TOKEN")
+    token = Settings().telegram_bot_token
     bot = TelegramWatchlistBot(token, path)
     try:
         asyncio.run(bot.run())
