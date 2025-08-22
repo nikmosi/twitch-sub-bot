@@ -77,6 +77,13 @@ In the bot chat you can send commands:
 /remove <login> # remove a login
 ```
 
+## Testing
+Run the test suite:
+
+```bash
+uv run pytest
+```
+
 ## License
 Released under the terms of the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
 
