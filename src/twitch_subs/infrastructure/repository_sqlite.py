@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List
 
-from sqlalchemy import Column, MetaData, String, Table, create_engine, select, text, insert, delete
+from sqlalchemy import (
+    Column,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    delete,
+    insert,
+    select,
+    text,
+)
 from sqlalchemy.orm import Session
 
 from ..domain.ports import WatchlistRepository
@@ -28,7 +38,7 @@ class SqliteWatchlistRepository(WatchlistRepository):
         metadata.create_all(self.engine)
 
     def add(self, login: str) -> None:
-        now = datetime.utcnow().isoformat()
+        now = datetime.now(UTC).isoformat()
         with Session(self.engine) as session:
             stmt = insert(watchlist).values(login=login, created_at=now)
             session.execute(stmt.prefix_with("OR IGNORE"))
