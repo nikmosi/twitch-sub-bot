@@ -18,9 +18,6 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
 
-    # Avoid loading actual .env file
-    monkeypatch.setattr(cli, "load_dotenv", lambda: None)
-
     # Provide fake implementations for dependencies
     class DummyTwitch:
         @classmethod
