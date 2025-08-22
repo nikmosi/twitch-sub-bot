@@ -113,6 +113,7 @@ def watch(
 @app.command("add", help="Add a Twitch username to the watchlist")
 def add(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
+    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     notifier = _get_notifier()
     repo = build_watchlist_repo()
@@ -122,7 +123,7 @@ def add(
             continue
         repo.add(username)
         typer.echo(f"Added {username}")
-        if notifier:
+        if notifier and notify:
             notifier.send_message(
                 f"➕ <code>{username}</code> добавлен в список наблюдения"
             )
