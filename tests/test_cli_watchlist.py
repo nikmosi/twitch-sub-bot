@@ -1,4 +1,3 @@
-import json
 from pathlib import Path
 from typing import Any
 
@@ -6,82 +5,59 @@ from pytest import MonkeyPatch
 from typer.testing import CliRunner
 
 from twitch_subs import cli
-from twitch_subs.infrastructure import watchlist
+from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
-def run(command: list[str], monkeypatch: MonkeyPatch, path: Path):
+def run(command: list[str], monkeypatch: MonkeyPatch, db: Path):
     runner = CliRunner()
-    monkeypatch.setenv("TWITCH_SUBS_WATCHLIST", str(path))
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
     return runner.invoke(cli.app, command)
 
 
 def test_add_list_remove_happy(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    res = run(["add", "foo", "-n"], monkeypatch, path)
+    db = tmp_path / "wl.db"
+    res = run(["add", "foo", "-n"], monkeypatch, db)
     assert res.exit_code == 0
-    assert path.exists()
-    res = run(["list"], monkeypatch, path)
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    assert repo.list() == ["foo"]
+    res = run(["list"], monkeypatch, db)
     assert res.exit_code == 0
     assert res.output.strip() == "foo"
-    res = run(["remove", "foo", "-n"], monkeypatch, path)
+    res = run(["remove", "foo", "-n"], monkeypatch, db)
     assert res.exit_code == 0
     assert (
-        run(["list"], monkeypatch, path).output.strip()
+        run(["list"], monkeypatch, db).output.strip()
         == "Watchlist is empty. Use 'add' to add usernames."
     )
 
 
 def test_idempotent_add(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    run(["add", "foo", "-n"], monkeypatch, path)
-    run(["add", "foo", "-n"], monkeypatch, path)
-    data = json.loads(path.read_text())
-    assert data["users"] == ["foo"]
+    db = tmp_path / "wl.db"
+    run(["add", "foo", "-n"], monkeypatch, db)
+    run(["add", "foo", "-n"], monkeypatch, db)
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    assert repo.list() == ["foo"]
 
 
 def test_remove_missing(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    res = run(["remove", "foo", "-n"], monkeypatch, path)
+    db = tmp_path / "wl.db"
+    res = run(["remove", "foo", "-n"], monkeypatch, db)
     assert res.exit_code != 0
     assert "not found" in res.output
-    res = run(["remove", "foo", "--quiet"], monkeypatch, path)
+    res = run(["remove", "foo", "--quiet"], monkeypatch, db)
     assert res.exit_code == 0
-
-
-def test_custom_watchlist_option(tmp_path: Path):
-    path = tmp_path / "custom.json"
-    runner = CliRunner()
-    res = runner.invoke(cli.app, ["add", "foo", "--watchlist", str(path), "-n"])
-    assert res.exit_code == 0
-    assert json.loads(path.read_text())["users"] == ["foo"]
 
 
 def test_username_validation(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    good = run(["add", "user_1", "-n"], monkeypatch, path)
+    db = tmp_path / "wl.db"
+    good = run(["add", "user_1", "-n"], monkeypatch, db)
     assert good.exit_code == 0
-    bad = run(["add", "bad*name", "-n"], monkeypatch, path)
+    bad = run(["add", "bad*name", "-n"], monkeypatch, db)
     assert bad.exit_code == 2
 
 
-def test_atomic_write(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    res = run(["add", "foo", "-n"], monkeypatch, path)
-    assert res.exit_code == 0
-    tmp_file = path.with_suffix(path.suffix + ".tmp")
-    assert not tmp_file.exists()
-    assert json.loads(path.read_text())["users"] == ["foo"]
-
-
-def test_default_watchlist_path(monkeypatch: MonkeyPatch, tmp_path: Path):
-    monkeypatch.chdir(tmp_path)
-    path = watchlist.resolve_path(env={})
-    assert path == Path(".watchlist.json")
-    assert path.resolve() == tmp_path / ".watchlist.json"
-
-
 def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
+    db = tmp_path / "wl.db"
     messages: list[str] = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
@@ -98,14 +74,15 @@ def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
         messages.append(text)
 
     monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
-    res = run(["add", "foo"], monkeypatch, path)
+    res = run(["add", "foo"], monkeypatch, db)
     assert res.exit_code == 0
     assert messages == ["➕ <code>foo</code> добавлен в список наблюдения"]
 
 
 def test_remove_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
-    path = tmp_path / "wl.json"
-    watchlist.save(path, ["foo"])
+    db = tmp_path / "wl.db"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    repo.add("foo")
     messages: list[str] = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
@@ -116,6 +93,6 @@ def test_remove_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
         messages.append(text)
 
     monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
-    res = run(["remove", "foo"], monkeypatch, path)
+    res = run(["remove", "foo"], monkeypatch, db)
     assert res.exit_code == 0
     assert messages == ["➖ <code>foo</code> удален из списка наблюдения"]

@@ -1,28 +1,30 @@
 from pathlib import Path
 
+from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
-from twitch_subs.infrastructure import watchlist
 
 
 def test_bot_add_remove_list(tmp_path: Path) -> None:
-    path = tmp_path / "watchlist.json"
-    bot = TelegramWatchlistBot("123:ABC", path)
+    db = tmp_path / "watch.db"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    bot = TelegramWatchlistBot("123:ABC", repo)
 
     assert bot.handle_command("/list") == "Watchlist is empty"
 
     assert bot.handle_command("/add foo") == "Added foo"
-    assert watchlist.load(path) == ["foo"]
+    assert repo.list() == ["foo"]
 
     assert "foo" in bot.handle_command("/list")
 
     assert bot.handle_command("/remove foo") == "Removed foo"
-    assert watchlist.load(path) == []
+    assert repo.list() == []
     assert bot.handle_command("/list") == "Watchlist is empty"
 
 
 def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
-    path = tmp_path / "watchlist.json"
-    bot = TelegramWatchlistBot("123:ABC", path)
+    db = tmp_path / "watch.db"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    bot = TelegramWatchlistBot("123:ABC", repo)
     bot.handle_command("/add foo")
 
     assert bot.handle_command("/add foo") == "foo already present"

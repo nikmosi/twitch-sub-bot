@@ -4,26 +4,17 @@ A small CLI utility that watches a list of Twitch logins and sends a Telegram me
 
 ## Features
 - Polls Twitch Helix `/users` API and checks the `broadcaster_type`.
-- Persists state in `.subs_status.json` to avoid duplicate notifications.
-- Stores Twitch logins in `.watchlist.json` and provides CLI commands to manage it.
+- Tracks last known status in memory to avoid duplicate notifications during a run.
+- Stores Twitch logins in a local SQLite database and provides CLI commands to manage it.
 - Sends formatted notifications to a Telegram chat using a bot token.
 - Announces start and graceful shutdown in the Telegram chat.
 
 ## Installation
 
 ### Database
-No external database is required. The application persists its state in two
-JSON files in the project root:
-
-- `.watchlist.json` – list of Twitch logins to monitor
-- `.subs_status.json` – last known `broadcaster_type` for each login
-
-They are created automatically, but you can initialize them manually:
-
-```bash
-uv run src/main.py add some_login   # creates .watchlist.json
-uv run src/main.py watch            # creates .subs_status.json
-```
+The application stores the watchlist in a local SQLite database. The path is
+controlled by the `DB_URL` environment variable and defaults to
+`sqlite:///./data.db`. Tables are created automatically on first use.
 
 ### Dependencies
 - Python 3.12+
@@ -36,13 +27,12 @@ Environment variables can be supplied directly or via a `.env` file:
 - `TWITCH_CLIENT_SECRET`
 - `TELEGRAM_BOT_TOKEN`
 - `TELEGRAM_CHAT_ID` – destination for messages
-- `TWITCH_SUBS_WATCHLIST` – optional path to watchlist file
+- `DB_URL` – optional SQLite database URL (default: `sqlite:///./data.db`)
+- `DB_ECHO` – set to `1` to enable SQLAlchemy echo for debugging
 
 Configuration files:
 
 - `.env` – environment variables for local development
-- `.watchlist.json` – maintained manually or through the CLI/Telegram bot
-- `.subs_status.json` – watcher state to avoid duplicate notifications
 
 ## Usage
 Manage the watchlist from the CLI:
@@ -59,9 +49,7 @@ Start watching the logins from the watchlist:
 uv run src/main.py watch --interval 300
 ```
 
-The optional `--interval` flag controls the polling delay in seconds. The
-watchlist defaults to `.watchlist.json` unless overridden by `--watchlist` or
-`TWITCH_SUBS_WATCHLIST`.
+The optional `--interval` flag controls the polling delay in seconds.
 
 Run the Telegram bot to manage the watchlist directly from a chat:
 

@@ -1,15 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import httpx
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from loguru import logger
 
-from ..domain.ports import NotifierProtocol
-from . import watchlist
+from ..domain.ports import NotifierProtocol, WatchlistRepository
+from . import build_watchlist_repo
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
@@ -45,8 +44,8 @@ class TelegramNotifier(NotifierProtocol):
 class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
-    def __init__(self, token: str, path: Path | None = None) -> None:
-        self.path = watchlist.resolve_path(path)
+    def __init__(self, token: str, repo: WatchlistRepository | None = None) -> None:
+        self.repo = repo or build_watchlist_repo()
         self.bot = Bot(token=token)
         self.dispatcher = Dispatcher()
 
@@ -56,17 +55,18 @@ class TelegramWatchlistBot:
 
     # ----- pure helpers used by handlers and tests -----
     def _handle_add(self, username: str) -> str:
-        if watchlist.add(self.path, username):
-            return f"Added {username}"
-        return f"{username} already present"
+        if self.repo.exists(username):
+            return f"{username} already present"
+        self.repo.add(username)
+        return f"Added {username}"
 
     def _handle_remove(self, username: str) -> str:
-        if watchlist.remove(self.path, username):
+        if self.repo.remove(username):
             return f"Removed {username}"
         return f"{username} not found"
 
     def _handle_list(self) -> str:
-        users = watchlist.load(self.path)
+        users = self.repo.list()
         if users:
             return "\n".join(users)
         return "Watchlist is empty"
