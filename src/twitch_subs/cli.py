@@ -161,11 +161,11 @@ def remove(
                 notifier.send_message(
                     f"➖ <code>{username}</code> удален из списка наблюдения",
                 )
-            return
-        if quiet:
-            raise typer.Exit(0)
-        typer.echo(f"{username} not found", err=True)
-        raise typer.Exit(1)
+        else:
+            if quiet:
+                raise typer.Exit(0)
+            typer.echo(f"{username} not found", err=True)
+            raise typer.Exit(1)
 
 
 @app.command("bot", help="Run Telegram bot to manage the watchlist")
