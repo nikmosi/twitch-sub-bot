@@ -102,7 +102,7 @@ class TelegramWatchlistBot:
         await message.answer(self._handle_list())
 
     async def run(self) -> None:
-        await self.dispatcher.start_polling(self.bot)
+        await self.dispatcher.start_polling(self.bot)  # pyright: ignore
 
     def run_polling(self) -> None:
         asyncio.run(self.run())
