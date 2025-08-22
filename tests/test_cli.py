@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import TwitchAppCreds
-from twitch_subs.infrastructure import watchlist
+from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
 def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
@@ -71,9 +71,11 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
 
     runner = CliRunner()
-    tmp_watch = tmp_path / "watch.json"
-    watchlist.save(tmp_watch, ["foo", "bar"])
-    monkeypatch.setenv("TWITCH_SUBS_WATCHLIST", str(tmp_watch))
+    db = tmp_path / "db.sqlite"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    repo.add("foo")
+    repo.add("bar")
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
     result = runner.invoke(cli.app, ["watch", "--interval", "1"])
     assert result.exit_code == 0
     assert calls["logins"] == ["bar", "foo"] or calls["logins"] == ["foo", "bar"]

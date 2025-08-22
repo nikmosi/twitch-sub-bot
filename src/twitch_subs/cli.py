@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
-from pathlib import Path
 from signal import SIGTERM, signal
 from types import FrameType
 from typing import Sequence
@@ -17,7 +16,7 @@ from .application.watcher import Watcher
 from .config import Settings
 from .domain.exceptions import SigTerm
 from .domain.models import TwitchAppCreds
-from .infrastructure import watchlist
+from .infrastructure import build_watchlist_repo
 from .infrastructure.state import StateRepository
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 from .infrastructure.twitch import TwitchClient
@@ -77,14 +76,11 @@ def watch(
     interval: int = typer.Option(
         300, "--interval", help="Poll interval, seconds (default: 300)"
     ),
-    watchlist_path: Path | None = typer.Option(
-        None, "--watchlist", help="Path to watchlist file"
-    ),
 ) -> None:
     """Watch Twitch logins and notify Telegram on status changes."""
 
-    path = watchlist.resolve_path(watchlist_path)
-    logins = watchlist.load(path)
+    repo = build_watchlist_repo()
+    logins = repo.list()
     if not logins:
         typer.echo("Watchlist is empty", err=True)
         raise typer.Exit(1)
@@ -109,7 +105,7 @@ def watch(
     )
 
     try:
-        watcher.watch(WatchListLoginProvider(), interval)
+        watcher.watch(WatchListLoginProvider(repo), interval)
     except (SigTerm, KeyboardInterrupt):
         at_exit(notifier)
 
@@ -117,33 +113,25 @@ def watch(
 @app.command("add", help="Add a Twitch username to the watchlist")
 def add(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    watchlist_path: Path | None = typer.Option(
-        None, "--watchlist", help="Path to watchlist file"
-    ),
-    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     notifier = _get_notifier()
+    repo = build_watchlist_repo()
     for username in usernames:
-        path = watchlist.resolve_path(watchlist_path)
-        added = watchlist.add(path, username)
-        if added:
-            typer.echo(f"Added {username}")
-            if notifier and notify:
-                notifier.send_message(
-                    f"➕ <code>{username}</code> добавлен в список наблюдения"
-                )
-        else:
+        if repo.exists(username):
             typer.echo(f"{username} already present")
+            continue
+        repo.add(username)
+        typer.echo(f"Added {username}")
+        if notifier:
+            notifier.send_message(
+                f"➕ <code>{username}</code> добавлен в список наблюдения"
+            )
 
 
 @app.command("list", help="List Twitch usernames in watchlist")
-def list_cmd(
-    watchlist_path: Path | None = typer.Option(
-        None, "--watchlist", help="Path to watchlist file"
-    ),
-) -> None:
-    path = watchlist.resolve_path(watchlist_path)
-    users = watchlist.load(path)
+def list_cmd() -> None:
+    repo = build_watchlist_repo()
+    users = repo.list()
     if not users:
         typer.echo("Watchlist is empty. Use 'add' to add usernames.")
         raise typer.Exit(0)
@@ -154,23 +142,23 @@ def list_cmd(
 @app.command("remove", help="Remove a Twitch username from the watchlist")
 def remove(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    watchlist_path: Path | None = typer.Option(
-        None, "--watchlist", help="Path to watchlist file"
-    ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q", help="Exit 0 even if username was absent"
+        False,
+        "--quiet",
+        "-q",
+        help="Exit 0 even if username was absent",
     ),
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     notifier = _get_notifier()
+    repo = build_watchlist_repo()
     for username in usernames:
-        path = watchlist.resolve_path(watchlist_path)
-        removed = watchlist.remove(path, username)
+        removed = repo.remove(username)
         if removed:
             typer.echo(f"Removed {username}")
             if notifier and notify:
                 notifier.send_message(
-                    f"➖ <code>{username}</code> удален из списка наблюдения"
+                    f"➖ <code>{username}</code> удален из списка наблюдения",
                 )
             return
         if quiet:
@@ -180,14 +168,9 @@ def remove(
 
 
 @app.command("bot", help="Run Telegram bot to manage the watchlist")
-def bot_cmd(
-    watchlist_path: Path | None = typer.Option(
-        None, "--watchlist", help="Path to watchlist file"
-    ),
-) -> None:
-    path = watchlist.resolve_path(watchlist_path)
+def bot_cmd() -> None:
     token = Settings().telegram_bot_token
-    bot = TelegramWatchlistBot(token, path)
+    bot = TelegramWatchlistBot(token, build_watchlist_repo())
     try:
         asyncio.run(bot.run())
     except KeyboardInterrupt:
