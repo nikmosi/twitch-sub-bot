@@ -3,7 +3,6 @@ from __future__ import annotations
 from twitch_subs.application.logins import LoginsProvider
 
 from ..domain.ports import WatchlistRepository
-from .error import WatchListIsEmpty
 
 
 class WatchListLoginProvider(LoginsProvider):
@@ -12,6 +11,4 @@ class WatchListLoginProvider(LoginsProvider):
 
     def get(self) -> list[str]:
         logins = self.repo.list()
-        if not logins:
-            raise WatchListIsEmpty()
         return logins
