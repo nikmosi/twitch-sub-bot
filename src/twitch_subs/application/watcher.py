@@ -102,9 +102,11 @@ class Watcher:
         self,
         logins: LoginsProvider,
         interval: int,
-        stop_event: threading.Event | None = None,
+        stop_event: threading.Event,
         report_interval: int = 86400,
     ) -> None:
+        """Run the watcher until *stop_event* is set."""
+
         state = self.state_repo.load()
         all_logins = logins.get()
         self.notifier.send_message(
@@ -114,7 +116,7 @@ class Watcher:
         next_report = time.time() + report_interval
         checks = 0
         errors = 0
-        while not (stop_event and stop_event.is_set()):
+        while not stop_event.is_set():
             checks += 1
             all_logins = logins.get()
             try:
@@ -130,7 +132,4 @@ class Watcher:
                 checks = 0
                 errors = 0
                 next_report += report_interval
-            if stop_event:
-                stop_event.wait(interval)
-            else:
-                time.sleep(interval)
+            stop_event.wait(interval)

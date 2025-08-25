@@ -1,6 +1,9 @@
 from typing import Dict
+import threading
+import time
 
 from twitch_subs.application.watcher import Watcher
+from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import BroadcasterType, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
@@ -105,3 +108,50 @@ def test_report_sends_daily_summary() -> None:
     assert "Errors: <b>2</b>" in text
     assert "foo" in text
     assert silent is True
+
+
+def test_watcher_stops_quickly_on_event() -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return ["foo"]
+
+    stop = threading.Event()
+    thread = threading.Thread(target=watcher.watch, args=(DummyLogins(), 1, stop))
+    thread.start()
+    time.sleep(0.1)
+    stop.set()
+    thread.join(1)
+    assert not thread.is_alive()
+
+
+def test_watcher_no_work_after_stop(monkeypatch: "MonkeyPatch") -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    calls = {"count": 0}
+
+    def fake_run_once(
+        self: Watcher, logins: list[str], state: dict[str, BroadcasterType]
+    ) -> bool:  # noqa: D401
+        calls["count"] += 1
+        stop.set()
+        return False
+
+    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return ["foo"]
+
+    stop = threading.Event()
+    thread = threading.Thread(target=watcher.watch, args=(DummyLogins(), 1, stop))
+    thread.start()
+    thread.join(1)
+    assert calls["count"] == 1

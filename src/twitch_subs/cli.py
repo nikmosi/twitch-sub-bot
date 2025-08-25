@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import os
 import re
+import signal
 import sys
 from atexit import register
-from threading import Thread
-from types import FrameType
+from threading import Event, Thread
 from typing import Sequence
 
 import typer
@@ -15,7 +17,6 @@ from twitch_subs.infrastructure.logings import WatchListLoginProvider
 
 from .application.watcher import Watcher
 from .config import Settings
-from .domain.exceptions import SigTerm
 from .domain.models import TwitchAppCreds
 from .infrastructure import build_watchlist_repo
 from .infrastructure.state import StateRepository
@@ -47,12 +48,6 @@ def root() -> None:
     """Root command for twitch-subs-checker."""
 
 
-def handle_sigterm(signum: int, frame: FrameType | None) -> None:
-    """Handle SIGTERM by raising a domain-specific exception."""
-    logger.info(f"Got sigterm {signum=}, {frame=}")
-    raise SigTerm
-
-
 def at_exit(notifier: TelegramNotifier) -> None:
     """Send a notification when the watcher stops."""
     logger.info("Watcher stopped by user")
@@ -64,16 +59,25 @@ def at_exit(notifier: TelegramNotifier) -> None:
 
 def _get_notifier() -> TelegramNotifier | None:
     """Return Telegram notifier if credentials are configured."""
-    settings = Settings()
-    token = settings.telegram_bot_token
-    chat = settings.telegram_chat_id
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat = os.getenv("TELEGRAM_CHAT_ID")
     if token and chat:
         return TelegramNotifier(token, chat)
     return None
 
 
-def run_bot(bot: TelegramWatchlistBot) -> None:
-    asyncio.run(bot.run())
+def run_bot(bot: TelegramWatchlistBot, stop: Event) -> None:
+    """Run Telegram bot until *stop* is set."""
+
+    async def _runner() -> None:
+        loop = asyncio.get_running_loop()
+        task = asyncio.create_task(bot.run())
+        await loop.run_in_executor(None, stop.wait)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+    asyncio.run(_runner())
 
 
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
@@ -109,17 +113,47 @@ def watch(
     bot = TelegramWatchlistBot(token, repo)
 
     register(at_exit, notifier)
+
+    stop = Event()
+
+    def _request_stop(signum: int, frame: object | None) -> None:
+        logger.info("Received signal %s", signum)
+        stop.set()
+
+    signal.signal(signal.SIGTERM, _request_stop)
+    signal.signal(signal.SIGINT, _request_stop)
+
+    thread_error: list[BaseException] = []
+
+    def _run_watcher() -> None:
+        try:
+            watcher.watch(WatchListLoginProvider(repo), interval, stop)
+        except Exception as exc:  # pragma: no cover - defensive
+            thread_error.append(exc)
+            stop.set()
+
+    watcher_thread = Thread(target=_run_watcher, daemon=False)
+    watcher_thread.start()
+
+    exit_code = 0
     try:
-        watcher_thread = Thread(
-            target=watcher.watch,
-            args=(WatchListLoginProvider(repo), interval),
-            daemon=True,
-        )
-        watcher_thread.start()
-        run_bot(bot)
-        watcher_thread.join(5)
-    except (SigTerm, KeyboardInterrupt):
-        pass
+        run_bot(bot, stop)
+    except KeyboardInterrupt:  # pragma: no cover - handled via signal
+        stop.set()
+    except Exception:
+        logger.exception("Bot crashed")
+        exit_code = 1
+    finally:
+        stop.set()
+        watcher_thread.join(10)
+        if watcher_thread.is_alive():
+            logger.error("Watcher thread did not exit")
+            exit_code = 1
+        if thread_error:
+            logger.error("Watcher thread raised: %s", thread_error[0])
+            exit_code = 1
+
+    raise typer.Exit(exit_code)
 
 
 @app.command("add", help="Add a Twitch username to the watchlist")
