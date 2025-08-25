@@ -1,9 +1,11 @@
-from typing import Dict
 import threading
 import time
+from typing import Dict
 
-from twitch_subs.application.watcher import Watcher
+from pytest import MonkeyPatch
+
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import BroadcasterType, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
@@ -129,7 +131,7 @@ def test_watcher_stops_quickly_on_event() -> None:
     assert not thread.is_alive()
 
 
-def test_watcher_no_work_after_stop(monkeypatch: "MonkeyPatch") -> None:
+def test_watcher_no_work_after_stop(monkeypatch: MonkeyPatch) -> None:
     twitch = DummyTwitch({})
     notifier = DummyNotifier()
     state_repo = DummyState()
@@ -140,6 +142,9 @@ def test_watcher_no_work_after_stop(monkeypatch: "MonkeyPatch") -> None:
     def fake_run_once(
         self: Watcher, logins: list[str], state: dict[str, BroadcasterType]
     ) -> bool:  # noqa: D401
+        _ = self
+        _ = logins
+        _ = state
         calls["count"] += 1
         stop.set()
         return False
