@@ -73,8 +73,8 @@ def run_bot(bot: TelegramWatchlistBot, stop: Event) -> None:
         loop = asyncio.get_running_loop()
         task = asyncio.create_task(bot.run())
         await loop.run_in_executor(None, stop.wait)
-        task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
+            await bot.stop()
             await task
 
     asyncio.run(_runner())
@@ -87,7 +87,6 @@ def watch(
     ),
 ) -> None:
     """Watch Twitch logins and notify Telegram on status changes."""
-
     repo = build_watchlist_repo()
     logins = repo.list()
 
