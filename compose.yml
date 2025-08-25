@@ -3,3 +3,4 @@ services:
     build: .
     env_file: .env
     command: [ "watch" ]
+    stop_grace_period: 20s
