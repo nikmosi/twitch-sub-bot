@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 import re
 import signal
 import sys
@@ -59,8 +58,9 @@ def at_exit(notifier: TelegramNotifier) -> None:
 
 def _get_notifier() -> TelegramNotifier | None:
     """Return Telegram notifier if credentials are configured."""
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat = os.getenv("TELEGRAM_CHAT_ID")
+    settings = Settings()
+    token = settings.telegram_bot_token
+    chat = settings.telegram_chat_id
     if token and chat:
         return TelegramNotifier(token, chat)
     return None
@@ -116,7 +116,7 @@ def watch(
 
     stop = Event()
 
-    def _request_stop(signum: int, frame: object | None) -> None:
+    def _request_stop(signum: int, _: object | None) -> None:
         logger.info("Received signal %s", signum)
         stop.set()
 
