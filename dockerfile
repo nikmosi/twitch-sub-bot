@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM ghcr.io/astral-sh/uv:alpine
 
+RUN apk add --no-cache tini
+
 WORKDIR /app
 
 # Copy dependency files and install
@@ -11,4 +13,4 @@ RUN uv sync --frozen --no-dev
 COPY . .
 
 # Default to running the CLI; additional args can be passed at runtime
-ENTRYPOINT ["uv", "run", "src/main.py"]
+ENTRYPOINT ["tini", "-g", "--", "uv", "run", "src/main.py"]

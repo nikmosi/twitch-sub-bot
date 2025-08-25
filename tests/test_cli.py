@@ -1,5 +1,6 @@
 from pathlib import Path
-from types import NoneType
+from threading import Event, Thread
+import threading
 from typing import Any, Sequence
 
 from pytest import MonkeyPatch
@@ -9,6 +10,32 @@ from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
+
+
+class DummyNotifier:
+    def __init__(self, token: str, chat_id: str) -> None:  # noqa: D401
+        self.token = token
+        self.chat_id = chat_id
+
+    def send_message(
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
+    ) -> None:  # noqa: D401
+        _ = text
+        _ = disable_web_page_preview
+        _ = disable_notification
+        pass
+
+
+class DummyBot:
+    def __init__(self, token: str, repo: Any | None = None) -> None:  # noqa: D401
+        _ = token
+        _ = repo
+
+    async def run(self) -> None:  # noqa: D401
+        pass
 
 
 def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
@@ -25,22 +52,6 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
             _ = creds
             return cls()
 
-    class DummyNotifier:
-        def __init__(self, token: str, chat_id: str) -> None:  # noqa: D401
-            self.token = token
-            self.chat_id = chat_id
-
-        def send_message(
-            self,
-            text: str,
-            disable_web_page_preview: bool = True,
-            disable_notification: bool = False,
-        ) -> None:  # noqa: D401
-            _ = text
-            _ = disable_web_page_preview
-            _ = disable_notification
-            pass
-
     class DummyStateRepo:
         def load(self) -> dict[str, Any]:  # noqa: D401
             return {}
@@ -50,7 +61,9 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
             pass
 
     monkeypatch.setattr(cli, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
     monkeypatch.setattr(cli, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(cli, "TelegramWatchlistBot", DummyBot)
     monkeypatch.setattr(cli, "StateRepository", lambda: DummyStateRepo())
 
     calls: dict[str, Any] = {}
@@ -59,16 +72,22 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
         self: cli.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
-        stop_event: NoneType = None,
+        stop_event: Event,
         report_interval: int = 86400,
-    ):  # noqa: D401
+    ) -> None:  # noqa: D401
         _ = self
-        _ = stop_event
         _ = report_interval
         calls["logins"] = logins.get() if isinstance(logins, LoginsProvider) else logins
         calls["interval"] = interval
+        stop_event.set()
 
     monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
+
+    def fake_run_bot(bot: Any, stop: Event) -> None:  # noqa: D401
+        _ = bot
+        stop.set()
+
+    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
 
     runner = CliRunner()
     db = tmp_path / "db.sqlite"
@@ -81,3 +100,59 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
     assert calls["logins"] == ["bar", "foo"] or calls["logins"] == ["foo", "bar"]
     assert set(calls["logins"]) == {"foo", "bar"}
     assert calls["interval"] == 1
+
+
+def test_cli_graceful_shutdown_sets_stop_and_joins(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+
+    class DummyTwitch:
+        @classmethod
+        def from_creds(cls, creds: TwitchAppCreds):  # noqa: D401
+            _ = creds
+            return cls()
+
+    monkeypatch.setattr(cli, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(cli, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(cli, "TelegramWatchlistBot", DummyBot)
+
+    thread_ref: dict[str, Thread] = {}
+    stop_holder: dict[str, Event] = {}
+
+    def fake_watch(
+        self: cli.Watcher,
+        logins: LoginsProvider | Sequence[str],
+        interval: int,
+        stop_event: Event,
+        report_interval: int = 86400,
+    ) -> None:  # noqa: D401
+        _ = self
+        _ = logins
+        _ = interval
+        _ = report_interval
+        thread_ref["thread"] = threading.current_thread()
+        stop_holder["event"] = stop_event
+        stop_event.wait()
+
+    monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
+
+    def fake_run_bot(bot: Any, stop: Event) -> None:  # noqa: D401
+        _ = bot
+        stop.set()
+
+    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+
+    runner = CliRunner()
+    db = tmp_path / "db.sqlite"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    repo.add("foo")
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    result = runner.invoke(cli.app, ["watch"])
+    assert result.exit_code == 0
+    assert stop_holder["event"].is_set()
+    assert thread_ref["thread"] is not None and not thread_ref["thread"].is_alive()

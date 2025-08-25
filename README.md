@@ -8,6 +8,7 @@ A small CLI utility that watches a list of Twitch logins and sends a Telegram me
 - Stores Twitch logins in a local SQLite database and provides CLI commands to manage it.
 - Sends formatted notifications to a Telegram chat using a bot token.
 - Announces start and graceful shutdown in the Telegram chat.
+ - Gracefully handles SIGINT/SIGTERM and stops the watcher thread cleanly.
 
 ## Installation
 
@@ -71,6 +72,11 @@ Run the test suite:
 ```bash
 uv run pytest
 ```
+
+### Docker
+
+The provided `dockerfile` uses [tini](https://github.com/krallin/tini) as PID 1
+so that `docker stop` (SIGTERM followed by SIGKILL) results in a clean shutdown.
 
 ## License
 Released under the terms of the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
