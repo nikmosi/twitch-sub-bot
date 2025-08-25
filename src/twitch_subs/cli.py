@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import re
 import sys
-from signal import SIGTERM, signal
+from atexit import register
+from threading import Thread
 from types import FrameType
 from typing import Sequence
 
@@ -71,6 +72,10 @@ def _get_notifier() -> TelegramNotifier | None:
     return None
 
 
+def run_bot(bot: TelegramWatchlistBot) -> None:
+    asyncio.run(bot.run())
+
+
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
 def watch(
     interval: int = typer.Option(
@@ -81,9 +86,6 @@ def watch(
 
     repo = build_watchlist_repo()
     logins = repo.list()
-    if not logins:
-        typer.echo("Watchlist is empty", err=True)
-        raise typer.Exit(1)
 
     settings = Settings()
     creds = TwitchAppCreds(
@@ -99,15 +101,25 @@ def watch(
     state_repo = StateRepository()
     watcher = Watcher(twitch, notifier, state_repo)
 
-    signal(SIGTERM, handle_sigterm)
     logger.info(
         "Starting watch for logins {} with interval {}s", ", ".join(logins), interval
     )
 
+    token = settings.telegram_bot_token
+    bot = TelegramWatchlistBot(token, repo)
+
+    register(at_exit, notifier)
     try:
-        watcher.watch(WatchListLoginProvider(repo), interval)
+        watcher_thread = Thread(
+            target=watcher.watch,
+            args=(WatchListLoginProvider(repo), interval),
+            daemon=True,
+        )
+        watcher_thread.start()
+        run_bot(bot)
+        watcher_thread.join(5)
     except (SigTerm, KeyboardInterrupt):
-        at_exit(notifier)
+        pass
 
 
 @app.command("add", help="Add a Twitch username to the watchlist")
@@ -166,16 +178,6 @@ def remove(
                 raise typer.Exit(0)
             typer.echo(f"{username} not found", err=True)
             raise typer.Exit(1)
-
-
-@app.command("bot", help="Run Telegram bot to manage the watchlist")
-def bot_cmd() -> None:
-    token = Settings().telegram_bot_token
-    bot = TelegramWatchlistBot(token, build_watchlist_repo())
-    try:
-        asyncio.run(bot.run())
-    except KeyboardInterrupt:
-        typer.echo("Bot stopped")
 
 
 def main() -> None:
