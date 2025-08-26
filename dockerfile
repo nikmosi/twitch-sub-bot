@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 FROM ghcr.io/astral-sh/uv:alpine
 
+ENV TERM xterm-256color
+
 RUN apk add --no-cache tini
 
 WORKDIR /app

@@ -1,5 +1,6 @@
 services:
   bot:
+    tty: true
     build: .
     env_file: .env
     command: [ "watch" ]
