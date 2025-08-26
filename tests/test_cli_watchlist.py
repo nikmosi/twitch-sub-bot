@@ -11,6 +11,8 @@ from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistReposito
 def run(command: list[str], monkeypatch: MonkeyPatch, db: Path):
     runner = CliRunner()
     monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     return runner.invoke(cli.app, command)
 
 
