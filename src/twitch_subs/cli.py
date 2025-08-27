@@ -5,7 +5,6 @@ import contextlib
 import re
 import signal
 import sys
-from atexit import register
 from threading import Event, Thread
 from typing import Sequence
 
@@ -110,8 +109,6 @@ def watch(
 
     token = settings.telegram_bot_token
     bot = TelegramWatchlistBot(token, repo)
-
-    register(at_exit, notifier)
 
     stop = Event()
 

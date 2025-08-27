@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Any
 
@@ -21,13 +20,13 @@ class TwitchAuthError(RuntimeError):
 class TwitchClient(TwitchClientProtocol):
     def __init__(
         self,
-        client_id: str | None = None,
-        client_secret: str | None = None,
+        client_id: str,
+        client_secret: str,
         *,
         timeout: float = 10.0,
     ) -> None:
-        self.client_id = client_id or os.getenv("TWITCH_CLIENT_ID")
-        self.client_secret = client_secret or os.getenv("TWITCH_CLIENT_SECRET")
+        self.client_id = client_id
+        self.client_secret = client_secret
         if not self.client_id or not self.client_secret:
             raise TwitchAuthError(
                 "TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set"
@@ -54,7 +53,9 @@ class TwitchClient(TwitchClientProtocol):
             broadcaster_type=BroadcasterType(btype),
         )
 
-    def _get(self, path: str, *, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _get(
+        self, path: str, *, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         self._ensure_token()
         r = self._http.get(path, params=params, headers=self._auth_headers())
         if r.status_code == 401:
