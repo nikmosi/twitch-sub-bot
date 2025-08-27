@@ -2,12 +2,11 @@ from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
-from pytest import MonkeyPatch
 
 from twitch_subs.config import Settings
 
 
-def test_settings_reads_env_file(tmp_path: Path, monkeypatch: MonkeyPatch):
+def test_settings_reads_env_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     env = tmp_path / ".env"
     env.write_text(
         "\n".join(
@@ -19,6 +18,13 @@ def test_settings_reads_env_file(tmp_path: Path, monkeypatch: MonkeyPatch):
             ]
         )
     )
+    for i in [
+        "TWITCH_CLIENT_ID",
+        "TWITCH_CLIENT_SECRET",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+    ]:
+        monkeypatch.delenv(i)
     monkeypatch.chdir(str(tmp_path))
     settings = Settings()
     assert settings.twitch_client_id == "cid"
@@ -27,9 +33,10 @@ def test_settings_reads_env_file(tmp_path: Path, monkeypatch: MonkeyPatch):
     assert settings.telegram_chat_id == "chat"
 
 
-def test_settings_missing_fields(tmp_path: Path, monkeypatch: MonkeyPatch):
+def test_settings_missing_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     env = tmp_path / ".env"
     env.write_text("TWITCH_CLIENT_ID=cid")
     monkeypatch.chdir(str(tmp_path))
+    monkeypatch.delenv("TWITCH_CLIENT_SECRET")
     with pytest.raises(ValidationError):
         Settings()

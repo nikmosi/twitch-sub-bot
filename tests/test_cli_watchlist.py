@@ -1,14 +1,14 @@
 from pathlib import Path
 from typing import Any
 
-from pytest import MonkeyPatch
+import pytest
 from typer.testing import CliRunner
 
 from twitch_subs import cli
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
-def run(command: list[str], monkeypatch: MonkeyPatch, db: Path):
+def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
     runner = CliRunner()
     monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
@@ -16,7 +16,7 @@ def run(command: list[str], monkeypatch: MonkeyPatch, db: Path):
     return runner.invoke(cli.app, command)
 
 
-def test_add_list_remove_happy(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_add_list_remove_happy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     res = run(["add", "foo", "-n"], monkeypatch, db)
     assert res.exit_code == 0
@@ -33,7 +33,7 @@ def test_add_list_remove_happy(monkeypatch: MonkeyPatch, tmp_path: Path):
     )
 
 
-def test_idempotent_add(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_idempotent_add(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     run(["add", "foo", "-n"], monkeypatch, db)
     run(["add", "foo", "-n"], monkeypatch, db)
@@ -41,7 +41,7 @@ def test_idempotent_add(monkeypatch: MonkeyPatch, tmp_path: Path):
     assert repo.list() == ["foo"]
 
 
-def test_remove_missing(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_remove_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     res = run(["remove", "foo", "-n"], monkeypatch, db)
     assert res.exit_code != 0
@@ -50,7 +50,7 @@ def test_remove_missing(monkeypatch: MonkeyPatch, tmp_path: Path):
     assert res.exit_code == 0
 
 
-def test_username_validation(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_username_validation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     good = run(["add", "user_1", "-n"], monkeypatch, db)
     assert good.exit_code == 0
@@ -58,7 +58,7 @@ def test_username_validation(monkeypatch: MonkeyPatch, tmp_path: Path):
     assert bad.exit_code == 2
 
 
-def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_add_notifies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     messages: list[str] = []
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
@@ -81,7 +81,7 @@ def test_add_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
     assert messages == ["➕ <code>foo</code> добавлен в список наблюдения"]
 
 
-def test_remove_notifies(monkeypatch: MonkeyPatch, tmp_path: Path):
+def test_remove_notifies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
     repo.add("foo")
