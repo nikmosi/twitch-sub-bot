@@ -163,3 +163,88 @@ def test_watcher_no_work_after_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     thread.start()
     thread.join(1)
     assert calls["count"] == 1
+
+
+def test_watch_respects_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return ["foo"]
+
+    stop = threading.Event()
+    waits: list[float] = []
+
+    def fake_wait(timeout: float) -> bool:
+        waits.append(timeout)
+        stop.set()
+        return True
+
+    monkeypatch.setattr(stop, "wait", fake_wait)
+    watcher.watch(DummyLogins(), 5, stop)
+    assert waits == [5]
+
+
+def test_watch_immediate_stop(monkeypatch: pytest.MonkeyPatch) -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return ["foo"]
+
+    stop = threading.Event()
+    stop.set()
+
+    called = False
+
+    def fake_run_once(self, logins, state):  # type: ignore[override]
+        nonlocal called
+        called = True
+        return False
+
+    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
+    watcher.watch(DummyLogins(), 5, stop)
+    assert called is False
+
+
+def test_watch_reports(monkeypatch: pytest.MonkeyPatch) -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return []
+
+    stop = threading.Event()
+
+    def fake_wait(timeout: float) -> bool:
+        stop.set()
+        return True
+
+    monkeypatch.setattr(stop, "wait", fake_wait)
+    monkeypatch.setattr(time, "time", lambda: 0.0)
+
+    called = {}
+
+    def fake_notify_report(
+        self,
+        logins: Sequence[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errors: int,
+    ) -> None:
+        called["reported"] = (logins, checks, errors)
+
+    monkeypatch.setattr(
+        DummyNotifier, "notify_report", fake_notify_report, raising=False
+    )
+    watcher.watch(DummyLogins(), 0, stop, report_interval=0)
+    assert called["reported"] == ([], 1, 0)

@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,8 +12,13 @@ from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistReposito
 def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
     runner = CliRunner()
     monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    # Minimal required environment so Settings() does not fail.
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    if "TELEGRAM_BOT_TOKEN" not in os.environ:
+        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    if "TELEGRAM_CHAT_ID" not in os.environ:
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
     return runner.invoke(cli.app, command)
 
 

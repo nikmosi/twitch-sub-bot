@@ -1,81 +1,88 @@
-# type: ignore
-# noqa
-# pyright: ignore
 from typing import Any
 
 import httpx
 import pytest
 
-from twitch_subs.config import Settings
-from twitch_subs.infrastructure.twitch import TwitchClient
+from twitch_subs.domain.models import BroadcasterType
+from twitch_subs.infrastructure.twitch import (
+    TWITCH_TOKEN_URL,
+    TwitchAuthError,
+    TwitchClient,
+)
 
 
 class FakeResp:
-    def __init__(self, status_code: int = 200, json_data: dict[Any, Any] | None = None):
+    def __init__(self, status_code: int = 200, json_data: dict[str, Any] | None = None):
         self.status_code = status_code
         self._json = json_data or {}
 
-    def json(self) -> dict[Any, Any]:
+    def json(self) -> dict[str, Any]:
         return self._json
 
     def raise_for_status(self) -> None:
-        if 400 <= self.status_code:
-            raise httpx.HTTPStatusError(
-                "error", request=None, response=httpx.Response(self.status_code)
-            )
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError("error", request=None, response=httpx.Response(self.status_code))
 
 
-def test_headers_and_401_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "cid")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "sec")
-
-    token_calls: list[dict[Any, Any]] = []
-
-    def fake_post(url: str, data: dict[Any, Any], timeout: float) -> FakeResp:  # type: ignore[override]
-        token_calls.append(data)
-        return FakeResp(
-            200, {"access_token": f"tok{len(token_calls)}", "expires_in": 3600}
-        )
+@pytest.fixture
+def token_ok(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Patch token endpoint to return a valid token."""
+    def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
+        assert url == TWITCH_TOKEN_URL
+        assert data["client_id"] == "cid"
+        assert data["client_secret"] == "sec"
+        return FakeResp(200, {"access_token": "tok", "expires_in": 3600})
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
-    calls: list[dict[Any, Any] | None] = []
 
-    def fake_get(
-        self: Any,
-        path: str,
-        params: httpx.QueryParams | None = None,
-        headers: dict[Any, Any] | None = None,
-    ):  # type: ignore[override]
-        _ = self
-        _ = path
-        _ = params
-        calls.append(headers)
-        if len(calls) == 1:
-            return FakeResp(401, {})
-        return FakeResp(200, {"data": [{"id": "1", "login": "foo"}]})
+def make_client(monkeypatch: pytest.MonkeyPatch, get_func: Any, timeout: float = 10.0) -> TwitchClient:
+    monkeypatch.setattr(httpx.Client, "get", get_func, raising=False)
+    return TwitchClient("cid", "sec", timeout=timeout)
 
-    monkeypatch.setattr(httpx.Client, "get", fake_get, raising=False)
 
-    settings = Settings()
-    tc = TwitchClient(settings.twitch_client_id, settings.twitch_client_secret)
+def test_get_user_by_login_ok(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        assert path == "/helix/users"
+        assert params == {"login": "foo"}
+        assert headers["Authorization"].startswith("Bearer ")
+        return FakeResp(200, {"data": [{"id": "1", "login": "foo", "broadcaster_type": "partner"}]})
+
+    tc = make_client(monkeypatch, fake_get)
     user = tc.get_user_by_login("foo")
     assert user and user.login == "foo"
+    assert user.broadcaster_type == BroadcasterType.PARTNER
 
-    assert token_calls and len(token_calls) == 2
-    first_headers, second_headers = calls
-    assert first_headers and first_headers["Client-Id"] == "cid"
-    assert "Authorization" in first_headers
-    assert second_headers["Authorization"] == "Bearer tok2"
+
+def test_401_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
+    token_calls: list[str] = []
+
+    def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
+        token_calls.append("call")
+        return FakeResp(200, {"access_token": f"tok{len(token_calls)}", "expires_in": 3600})
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+
+    calls: list[dict[str, str] | None] = []
+
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        calls.append(headers)
+        if len(calls) == 1:
+            return FakeResp(401)
+        return FakeResp(200, {"data": []})
+
+    tc = make_client(monkeypatch, fake_get)
+    tc.get_user_by_login("foo")
+    assert len(token_calls) == 2
+    first, second = calls
+    assert first and first["Client-Id"] == "cid"
+    assert second and second["Authorization"] == "Bearer tok2"
 
 
 def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "cid")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "sec")
-
     token_calls = 0
 
-    def fake_post(url: str, data: dict, timeout: float) -> FakeResp:  # type: ignore[override]
+    def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
         nonlocal token_calls
         token_calls += 1
         return FakeResp(200, {"access_token": f"tok{token_calls}", "expires_in": 1})
@@ -85,10 +92,39 @@ def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
         return FakeResp(200, {"data": []})
 
-    monkeypatch.setattr(httpx.Client, "get", fake_get, raising=False)
-
-    settings = Settings()
-    tc = TwitchClient(settings.twitch_client_id, settings.twitch_client_secret)
+    tc = make_client(monkeypatch, fake_get)
     tc.get_user_by_login("foo")
     tc.get_user_by_login("bar")
     assert token_calls == 2
+
+
+def test_5xx_raises(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        return FakeResp(500)
+
+    tc = make_client(monkeypatch, fake_get)
+    with pytest.raises(httpx.HTTPStatusError):
+        tc.get_user_by_login("foo")
+
+
+def test_rate_limit(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        return FakeResp(429)
+
+    tc = make_client(monkeypatch, fake_get)
+    with pytest.raises(httpx.HTTPStatusError):
+        tc.get_user_by_login("foo")
+
+
+def test_timeout(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        raise httpx.TimeoutException("boom")
+
+    tc = make_client(monkeypatch, fake_get)
+    with pytest.raises(httpx.TimeoutException):
+        tc.get_user_by_login("foo")
+
+
+def test_missing_creds() -> None:
+    with pytest.raises(TwitchAuthError):
+        TwitchClient("", "")

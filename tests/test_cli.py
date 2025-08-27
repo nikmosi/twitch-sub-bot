@@ -158,3 +158,21 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
     assert result.exit_code == 0
     assert stop_holder["event"].is_set()
     assert thread_ref["thread"] is not None and not thread_ref["thread"].is_alive()
+
+
+def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
+    assert cli._get_notifier() is None
+
+
+def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
+    notifier = cli._get_notifier()
+    assert isinstance(notifier, cli.TelegramNotifier)
+    assert notifier.token == "t" and notifier.chat_id == "c"

@@ -3,6 +3,7 @@ from typing import Any
 import httpx
 import pytest
 
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
 from twitch_subs.infrastructure.telegram import (
     TELEGRAM_API_BASE,
     TelegramNotifier,
@@ -76,3 +77,44 @@ def test_send_message_swallow_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "Client", lambda **_: FailClient())  # pyright: ignore
     notifier = TelegramNotifier("tok", "chat")
     notifier.send_message("hi")  # should not raise
+
+
+def test_notify_about_change_formats(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fake_send(self: Any, text: str, **_: Any) -> None:
+        calls.append(text)
+
+    monkeypatch.setattr(TelegramNotifier, "send_message", fake_send)
+    notifier = TelegramNotifier("t", "c")
+    status = LoginStatus(
+        "foo",
+        BroadcasterType.AFFILIATE,
+        UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE),
+    )
+    notifier.notify_about_change(status, BroadcasterType.PARTNER)
+    assert calls and "<code>foo</code>" in calls[0]
+
+
+def test_notify_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    messages: list[str] = []
+
+    def fake_send(self: Any, text: str, **_: Any) -> None:
+        messages.append(text)
+
+    monkeypatch.setattr(TelegramNotifier, "send_message", fake_send)
+    notifier = TelegramNotifier("t", "c")
+    state = {"foo": BroadcasterType.AFFILIATE}
+    notifier.notify_report(["foo"], state, checks=1, errors=0)
+    assert messages and "Checks: <b>1</b>" in messages[0]
+
+
+def test_notify_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    messages: list[str] = []
+
+    def fake_send(self: Any, text: str, **_: Any) -> None:
+        messages.append(text)
+
+    monkeypatch.setattr(TelegramNotifier, "send_message", fake_send)
+    TelegramNotifier("t", "c").notify_about_start()
+    assert messages == ["🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю."]
