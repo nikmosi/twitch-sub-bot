@@ -2,28 +2,18 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
 
-from ..domain.models import BroadcasterType, UserRecord
+from ..domain.models import BroadcasterType, LoginStatus
 from ..domain.ports import (
     NotifierProtocol,
     StateRepositoryProtocol,
     TwitchClientProtocol,
 )
-
-
-@dataclass(frozen=True)
-class LoginStatus:
-    """Result of a single login check."""
-
-    login: str
-    broadcaster_type: BroadcasterType | None
-    user: UserRecord | None
 
 
 class Watcher:
@@ -39,22 +29,18 @@ class Watcher:
         self.notifier = notifier
         self.state_repo = state_repo
 
-    def check_logins(self, logins: Iterable[str]) -> list[LoginStatus]:
-        statuses: list[LoginStatus] = []
-        for login in logins:
-            logger.info("Checking login {}", login)
-            user = self.twitch.get_user_by_login(login)
-            btype = None if user is None else user.broadcaster_type
-            logger.info("Login {} status {}", login, btype or "not-found")
-            statuses.append(LoginStatus(login, btype, user))
-        return statuses
+    def check_login(self, login: str) -> LoginStatus:
+        logger.info("Checking login {}", login)
+        user = self.twitch.get_user_by_login(login)
+        btype = None if user is None else user.broadcaster_type
+        logger.info("Login {} status {}", login, btype or "not-found")
+        return LoginStatus(login, btype, user)
 
     def run_once(
         self, logins: Iterable[str], state: dict[str, BroadcasterType]
     ) -> bool:
-        rows = self.check_logins(logins)
         changed = False
-        for status in rows:
+        for status in map(self.check_login, logins):
             prev = state.get(status.login, BroadcasterType.NONE)
             assert prev is not None
             curr = status.broadcaster_type or BroadcasterType.NONE
@@ -68,35 +54,17 @@ class Watcher:
                     curr.value,
                 )
                 if curr.is_subscribable():
-                    user = status.user
-                    display = user.display_name if user else status.login
-                    badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
-                    subflag = "да" if curr.is_subscribable() else "нет"
-                    text = (
-                        f"{badge} <b>{display}</b> стал <b>{curr.value}</b>\n"
-                        f"Подписка доступна: <b>{subflag}</b>\n"
-                        f"Логин: <code>{status.login}</code>"
-                    )
-                    self.notifier.send_message(text)
+                    self.notifier.notify_about_change(status, curr)
         return changed
 
-    def report(
+    def _report(
         self,
-        logins: Iterable[str],
+        logins: Sequence[str],
         state: dict[str, BroadcasterType],
         checks: int,
         errors: int,
     ) -> None:
-        text = ["📊 <b>Twitch Subs Daily Report</b>"]
-        text.append(f"Checks: <b>{checks}</b>")
-        text.append(f"Errors: <b>{errors}</b>")
-        text.append("Statuses:")
-        for login in logins:
-            broadcastertype = state.get(login, BroadcasterType.NONE)
-            assert broadcastertype is not None
-            btype = broadcastertype.value
-            text.append(f"• <code>{login}</code>: <b>{btype}</b>")
-        self.notifier.send_message("\n".join(text), disable_notification=True)
+        self.notifier.notify_report(logins, state, checks, errors)
 
     def watch(
         self,
@@ -108,11 +76,7 @@ class Watcher:
         """Run the watcher until *stop_event* is set."""
 
         state = self.state_repo.load()
-        all_logins = logins.get()
-        self.notifier.send_message(
-            "🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю: "
-            + ", ".join(f"<code>{login}</code>" for login in all_logins)
-        )
+        self.notifier.notify_about_start()
         next_report = time.time() + report_interval
         checks = 0
         errors = 0
@@ -128,7 +92,7 @@ class Watcher:
                 errors += 1
                 logger.exception("Run once failed")
             if time.time() >= next_report:
-                self.report(all_logins, state, checks, errors)
+                self._report(all_logins, state, checks, errors)
                 checks = 0
                 errors = 0
                 next_report += report_interval

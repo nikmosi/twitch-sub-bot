@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Sequence
 
 import httpx
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from loguru import logger
+
+from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
 from ..domain.ports import NotifierProtocol, WatchlistRepository
 from . import build_watchlist_repo
@@ -17,6 +20,39 @@ class TelegramNotifier(NotifierProtocol):
     def __init__(self, token: str, chat_id: str):
         self.token = token
         self.chat_id = chat_id
+
+    def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
+        user = status.user
+        display = user.display_name if user else status.login
+        badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
+        subflag = "да" if curr.is_subscribable() else "нет"
+        text = (
+            f"{badge} <b>{display}</b> стал <b>{curr.value}</b>\n"
+            f"Подписка доступна: <b>{subflag}</b>\n"
+            f"Логин: <code>{status.login}</code>"
+        )
+        self.send_message(text)
+
+    def notify_about_start(self) -> None:
+        self.send_message("🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю.")
+
+    def notify_report(
+        self,
+        logins: Sequence[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errors: int,
+    ) -> None:
+        text = ["📊 <b>Twitch Subs Daily Report</b>"]
+        text.append(f"Checks: <b>{checks}</b>")
+        text.append(f"Errors: <b>{errors}</b>")
+        text.append("Statuses:")
+        for login in logins:
+            broadcastertype = state.get(login, BroadcasterType.NONE)
+            assert broadcastertype is not None
+            btype = broadcastertype.value
+            text.append(f"• <code>{login}</code>: <b>{btype}</b>")
+        self.send_message("\n".join(text), disable_notification=True)
 
     def send_message(
         self,

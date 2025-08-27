@@ -25,3 +25,12 @@ class UserRecord:
     login: str
     display_name: str
     broadcaster_type: BroadcasterType
+
+
+@dataclass(frozen=True)
+class LoginStatus:
+    """Result of a single login check."""
+
+    login: str
+    broadcaster_type: BroadcasterType | None
+    user: UserRecord | None

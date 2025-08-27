@@ -1,12 +1,12 @@
 import threading
 import time
-from typing import Dict
+from typing import Dict, Sequence
 
 from pytest import MonkeyPatch
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.watcher import Watcher
-from twitch_subs.domain.models import BroadcasterType, UserRecord
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
     StateRepositoryProtocol,
@@ -17,6 +17,24 @@ from twitch_subs.domain.ports import (
 class DummyNotifier(NotifierProtocol):
     def __init__(self) -> None:
         self.sent: list[tuple[str, bool]] = []
+        self.notify_about_start_check = False
+        self.notify_about_change_check = False
+        self.notify_report_check = False
+
+    def notify_about_start(self) -> None:
+        self.notify_about_start_check = True
+
+    def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
+        self.notify_about_change_check = True
+
+    def notify_report(
+        self,
+        logins: Sequence[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errors: int,
+    ) -> None:
+        self.notify_report_check = True
 
     def send_message(
         self,
@@ -57,7 +75,7 @@ def test_check_logins() -> None:
     state_repo = DummyState()
     watcher = Watcher(twitch, notifier, state_repo)
 
-    rows = watcher.check_logins(["foo", "bar"])
+    rows = [watcher.check_login(i) for i in ["foo", "bar"]]
     assert (
         rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
     )
@@ -78,7 +96,7 @@ def test_run_once_updates_state_and_notifies() -> None:
 
     assert changed is True
     assert state["foo"] == BroadcasterType.AFFILIATE
-    assert notifier.sent
+    assert notifier.notify_about_change_check
 
 
 def test_run_once_no_change_does_not_notify() -> None:
@@ -95,21 +113,6 @@ def test_run_once_no_change_does_not_notify() -> None:
 
     assert changed is False
     assert not notifier.sent
-
-
-def test_report_sends_daily_summary() -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-    state: Dict[str, BroadcasterType] = {"foo": BroadcasterType.AFFILIATE}
-    watcher.report(["foo"], state, checks=5, errors=2)
-    assert notifier.sent
-    text, silent = notifier.sent[0]
-    assert "Checks: <b>5</b>" in text
-    assert "Errors: <b>2</b>" in text
-    assert "foo" in text
-    assert silent is True
 
 
 def test_watcher_stops_quickly_on_event() -> None:

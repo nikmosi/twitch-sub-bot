@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Protocol, Sequence
 
-from .models import BroadcasterType, UserRecord
+from .models import BroadcasterType, LoginStatus, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
@@ -10,6 +10,20 @@ class TwitchClientProtocol(Protocol):
 
 
 class NotifierProtocol(Protocol):
+    def notify_about_change(
+        self, status: LoginStatus, curr: BroadcasterType
+    ) -> None: ...
+
+    def notify_about_start(self) -> None: ...
+
+    def notify_report(
+        self,
+        logins: Sequence[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errors: int,
+    ) -> None: ...
+
     def send_message(
         self,
         text: str,
