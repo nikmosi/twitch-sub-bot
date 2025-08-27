@@ -88,9 +88,9 @@ class Watcher:
                 if changed:
                     logger.info("State changed, saving")
                     self.state_repo.save(state)
-            except Exception:
+            except Exception as e:
                 errors += 1
-                logger.exception("Run once failed")
+                logger.exception(f"Run once failed: {e}")
             if time.time() >= next_report:
                 self._report(all_logins, state, checks, errors)
                 checks = 0

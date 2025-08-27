@@ -66,7 +66,7 @@ def test_cli_watch_invokes_watcher(
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
     monkeypatch.setattr(cli, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(cli, "TelegramWatchlistBot", DummyBot)
-    monkeypatch.setattr(cli, "StateRepository", lambda: DummyStateRepo())
+    monkeypatch.setattr(cli, "MemoryStateRepository", lambda: DummyStateRepo())
 
     calls: dict[str, Any] = {}
 

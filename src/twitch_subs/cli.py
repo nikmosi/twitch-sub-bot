@@ -17,7 +17,7 @@ from .application.watcher import Watcher
 from .config import Settings
 from .domain.models import TwitchAppCreds
 from .infrastructure import build_watchlist_repo
-from .infrastructure.state import StateRepository
+from .infrastructure.state import MemoryStateRepository
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 from .infrastructure.twitch import TwitchClient
 
@@ -100,7 +100,7 @@ def watch(
 
     twitch = TwitchClient.from_creds(creds)
     notifier = TelegramNotifier(tg_token, tg_chat)
-    state_repo = StateRepository()
+    state_repo = MemoryStateRepository()
     watcher = Watcher(twitch, notifier, state_repo)
 
     logger.info(

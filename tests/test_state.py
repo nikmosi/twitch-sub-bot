@@ -1,9 +1,9 @@
 from twitch_subs.domain.models import BroadcasterType
-from twitch_subs.infrastructure.state import StateRepository
+from twitch_subs.infrastructure.state import MemoryStateRepository
 
 
 def test_state_roundtrip() -> None:
-    repo = StateRepository()
+    repo = MemoryStateRepository()
     state = {"foo": BroadcasterType.AFFILIATE}
     repo.save(state)
     loaded = repo.load()

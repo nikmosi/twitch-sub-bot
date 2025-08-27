@@ -6,7 +6,7 @@ from ..domain.models import BroadcasterType
 from ..domain.ports import StateRepositoryProtocol
 
 
-class StateRepository(StateRepositoryProtocol):
+class MemoryStateRepository(StateRepositoryProtocol):
     """In-memory state repository used during runtime."""
 
     def __init__(self) -> None:
