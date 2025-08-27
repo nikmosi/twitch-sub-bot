@@ -1,9 +1,9 @@
+import threading
 from pathlib import Path
 from threading import Event, Thread
-import threading
 from typing import Any, Sequence
 
-from pytest import MonkeyPatch
+import pytest
 from typer.testing import CliRunner
 
 from twitch_subs import cli
@@ -38,7 +38,9 @@ class DummyBot:
         pass
 
 
-def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_watch_invokes_watcher(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     # Set required environment variables
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
@@ -103,7 +105,7 @@ def test_cli_watch_invokes_watcher(monkeypatch: MonkeyPatch, tmp_path: Path) -> 
 
 
 def test_cli_graceful_shutdown_sets_stop_and_joins(
-    monkeypatch: MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")

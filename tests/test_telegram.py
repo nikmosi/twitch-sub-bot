@@ -1,7 +1,7 @@
 from typing import Any
 
 import httpx
-from pytest import MonkeyPatch
+import pytest
 
 from twitch_subs.infrastructure.telegram import (
     TELEGRAM_API_BASE,
@@ -38,7 +38,7 @@ class DummyClient:
         return DummyResponse()
 
 
-def test_send_message_builds_request(monkeypatch: MonkeyPatch) -> None:
+def test_send_message_builds_request(monkeypatch: pytest.MonkeyPatch) -> None:
     client = DummyClient()
     monkeypatch.setattr(httpx, "Client", lambda **_: client)  # pyright: ignore
     notifier = TelegramNotifier("tok", "chat")
@@ -54,7 +54,7 @@ def test_send_message_builds_request(monkeypatch: MonkeyPatch) -> None:
     assert payload["disable_notification"] is True
 
 
-def test_send_message_swallow_errors(monkeypatch: MonkeyPatch) -> None:
+def test_send_message_swallow_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     class FailClient:
         def __init__(self, **_) -> None:
             pass

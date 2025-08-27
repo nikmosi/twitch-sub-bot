@@ -2,7 +2,7 @@ import threading
 import time
 from typing import Dict, Sequence
 
-from pytest import MonkeyPatch
+import pytest
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.watcher import Watcher
@@ -134,7 +134,7 @@ def test_watcher_stops_quickly_on_event() -> None:
     assert not thread.is_alive()
 
 
-def test_watcher_no_work_after_stop(monkeypatch: MonkeyPatch) -> None:
+def test_watcher_no_work_after_stop(monkeypatch: pytest.MonkeyPatch) -> None:
     twitch = DummyTwitch({})
     notifier = DummyNotifier()
     state_repo = DummyState()
