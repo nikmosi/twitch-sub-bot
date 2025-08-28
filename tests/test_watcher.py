@@ -79,7 +79,7 @@ def test_check_logins() -> None:
     assert (
         rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
     )
-    assert rows[1].login == "bar" and rows[1].broadcaster_type is None
+    assert rows[1].login == "bar" and rows[1].broadcaster_type is BroadcasterType.NONE
 
 
 def test_run_once_updates_state_and_notifies() -> None:

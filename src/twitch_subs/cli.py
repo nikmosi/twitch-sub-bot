@@ -5,6 +5,7 @@ import contextlib
 import re
 import signal
 import sys
+from itertools import batched
 from threading import Event, Thread
 from typing import Sequence
 
@@ -137,8 +138,8 @@ def watch(
         run_bot(bot, stop)
     except KeyboardInterrupt:  # pragma: no cover - handled via signal
         stop.set()
-    except Exception:
-        logger.exception("Bot crashed")
+    except Exception as e:
+        logger.exception(f"Bot crashed, {e}")
         exit_code = 1
     finally:
         stop.set()
@@ -160,15 +161,18 @@ def add(
 ) -> None:
     notifier = _get_notifier()
     repo = build_watchlist_repo()
-    for username in usernames:
-        if repo.exists(username):
-            typer.echo(f"{username} already present")
-            continue
-        repo.add(username)
-        typer.echo(f"Added {username}")
+    for batch in batched(usernames, n=10):
+        for username in batch:
+            if repo.exists(username):
+                typer.echo(f"{username} already present")
+                continue
+            repo.add(username)
+            typer.echo(f"Added {username}")
         if notifier and notify:
             notifier.send_message(
-                f"➕ <code>{username}</code> добавлен в список наблюдения"
+                "\n".join(
+                    [f"➕ <code>{i}</code> добавлен в список наблюдения" for i in batch]
+                )
             )
 
 
