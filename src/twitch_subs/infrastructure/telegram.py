@@ -105,8 +105,13 @@ class TelegramWatchlistBot:
 
     def _handle_list(self) -> str:
         users = self.repo.list()
+        text = ["📊 <b>List</b>"]
+        text.append("Statuses:")
+        for login in users:
+            text.append(f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>')
+
         if users:
-            return "\n".join(users)
+            return "\n".join(text)
         return "Watchlist is empty"
 
     def handle_command(self, text: str) -> str:
