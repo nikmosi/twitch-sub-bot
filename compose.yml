@@ -4,4 +4,6 @@ services:
     build: .
     env_file: .env
     command: [ "watch" ]
+    volumes:
+      - ./var:/app/var:rw
     stop_grace_period: 20s
