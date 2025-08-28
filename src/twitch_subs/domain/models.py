@@ -32,5 +32,5 @@ class LoginStatus:
     """Result of a single login check."""
 
     login: str
-    broadcaster_type: BroadcasterType | None
+    broadcaster_type: BroadcasterType
     user: UserRecord | None

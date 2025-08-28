@@ -113,7 +113,8 @@ def watch(
     stop = Event()
 
     def _request_stop(signum: int, _: object | None) -> None:
-        logger.info("Received signal %s", signum)
+        logger.info(f"Received signal {signum=}")
+        at_exit(notifier)
         stop.set()
 
     signal.signal(signal.SIGTERM, _request_stop)

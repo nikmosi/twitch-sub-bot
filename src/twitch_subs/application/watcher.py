@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import defaultdict
 from typing import Iterable, Sequence
 
 from loguru import logger
@@ -32,17 +33,16 @@ class Watcher:
     def check_login(self, login: str) -> LoginStatus:
         logger.info("Checking login {}", login)
         user = self.twitch.get_user_by_login(login)
-        btype = None if user is None else user.broadcaster_type
+        btype = BroadcasterType.NONE if user is None else user.broadcaster_type
         logger.info("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
     def run_once(
-        self, logins: Iterable[str], state: dict[str, BroadcasterType]
+        self, logins: Iterable[str], state: defaultdict[str, BroadcasterType]
     ) -> bool:
         changed = False
         for status in map(self.check_login, logins):
-            prev = state.get(status.login, BroadcasterType.NONE)
-            assert prev is not None
+            prev = state[status.login]
             curr = status.broadcaster_type or BroadcasterType.NONE
             if prev != curr:
                 state[status.login] = curr
@@ -84,10 +84,14 @@ class Watcher:
             checks += 1
             all_logins = logins.get()
             try:
-                changed = self.run_once(all_logins, state)
+                data = (
+                    defaultdict[str, BroadcasterType](lambda: BroadcasterType.NONE)
+                    | state
+                )
+                changed = self.run_once(all_logins, data)
                 if changed:
                     logger.info("State changed, saving")
-                    self.state_repo.save(state)
+                    self.state_repo.save(data)
             except Exception as e:
                 errors += 1
                 logger.exception(f"Run once failed: {e}")
