@@ -3,8 +3,6 @@ FROM ghcr.io/astral-sh/uv:alpine
 
 ENV TERM xterm-256color
 
-RUN apk add --no-cache tini
-
 WORKDIR /app
 
 # Copy dependency files and install
@@ -15,4 +13,4 @@ RUN uv sync --frozen --no-dev
 COPY . .
 
 # Default to running the CLI; additional args can be passed at runtime
-ENTRYPOINT ["tini", "-g", "--", "uv", "run", "src/main.py"]
+ENTRYPOINT ["uv", "run", "src/main.py"]
