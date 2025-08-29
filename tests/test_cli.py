@@ -30,9 +30,10 @@ class DummyNotifier:
 
 
 class DummyBot:
-    def __init__(self, token: str, repo: Any | None = None) -> None:  # noqa: D401
+    def __init__(self, token: str, id: str, repo: Any | None = None) -> None:  # noqa: D401
         _ = token
         _ = repo
+        _ = id
 
     async def run(self) -> None:  # noqa: D401
         pass

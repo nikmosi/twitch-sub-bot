@@ -109,7 +109,7 @@ def watch(
     )
 
     token = settings.telegram_bot_token
-    bot = TelegramWatchlistBot(token, repo)
+    bot = TelegramWatchlistBot(token, settings.telegram_chat_id, repo)
 
     stop = Event()
 

@@ -6,7 +6,8 @@ from typing import Sequence
 import httpx
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
-from aiogram.filters import Command
+from aiogram.filters import Command, Filter
+from aiogram.types import Message
 from loguru import logger
 
 from twitch_subs.domain.models import BroadcasterType, LoginStatus
@@ -82,17 +83,37 @@ class TelegramNotifier(NotifierProtocol):
             logger.exception("Telegram send failed")
 
 
+class IDFilter(Filter):
+    def __init__(self, id: str):
+        self._id = int(id)
+
+    async def __call__(self, obj: Message) -> bool:
+        res = obj.chat.id == self._id
+        if not res:
+            logger.info("Got message from unregister user.")
+        return res
+
+
 class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
-    def __init__(self, token: str, repo: WatchlistRepository | None = None) -> None:
+    def __init__(
+        self, token: str, chat_id: str, repo: WatchlistRepository | None = None
+    ) -> None:
         self.repo = repo or build_watchlist_repo()
         self.bot = Bot(token=token)
         self.dispatcher = Dispatcher()
 
-        self.dispatcher.message.register(self._cmd_add, Command("add"))
-        self.dispatcher.message.register(self._cmd_remove, Command("remove"))
-        self.dispatcher.message.register(self._cmd_list, Command("list"))
+        self.dispatcher.message.register(
+            self._cmd_add, Command("add"), IDFilter(chat_id)
+        )
+
+        self.dispatcher.message.register(
+            self._cmd_remove, Command("remove"), IDFilter(chat_id)
+        )
+        self.dispatcher.message.register(
+            self._cmd_list, Command("list"), IDFilter(chat_id)
+        )
 
     # ----- pure helpers used by handlers and tests -----
     def _handle_add(self, username: str) -> str:
