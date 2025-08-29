@@ -1,0 +1,77 @@
+# Deploy Docker Compose app to remote server via SSH
+# Secrets required: SSH_HOST, SSH_USER, SSH_KEY, optional SSH_PORT (default 22)
+name: Deploy
+
+on:
+  # Auto deploy to stage on pushes to main
+  push:
+    branches: [main]
+  # Manual trigger for prod
+  workflow_dispatch:
+
+jobs:
+  deploy_stage:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: stage
+    # Prevent overlapping stage deployments
+    concurrency:
+      group: deploy-stage
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Deploy to stage over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -euxo pipefail
+          PORT="${SSH_PORT:-22}"
+          ssh -o StrictHostKeyChecking=no -p "$PORT" "$SSH_USER@$SSH_HOST" <<'EOSSH'
+            set -euxo pipefail
+            cd /root/twitch-sub-bot
+            docker compose pull
+            docker compose down
+            docker compose up -d --build
+EOSSH
+
+  deploy_prod:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: prod # Protect this environment in repository settings for manual approval
+    # Prevent overlapping prod deployments
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.8.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_KEY }}
+
+      - name: Deploy to prod over SSH
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          set -euxo pipefail
+          PORT="${SSH_PORT:-22}"
+          ssh -o StrictHostKeyChecking=no -p "$PORT" "$SSH_USER@$SSH_HOST" <<'EOSSH'
+            set -euxo pipefail
+            cd /root/twitch-sub-bot
+            docker compose pull
+            docker compose down
+            docker compose up -d --build
+EOSSH
