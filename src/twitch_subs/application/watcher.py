@@ -8,7 +8,7 @@ from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
 
-from ..domain.models import BroadcasterType, LoginStatus
+from ..domain.models import BroadcasterType, LoginStatus, State
 from ..domain.ports import (
     NotifierProtocol,
     StateRepositoryProtocol,
@@ -36,9 +36,7 @@ class Watcher:
         logger.info("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
-    def run_once(
-        self, logins: Iterable[str], state: dict[str, BroadcasterType]
-    ) -> bool:
+    def run_once(self, logins: Iterable[str], state: State) -> bool:
         changed = False
         for status in map(self.check_login, logins):
             prev = state.get(status.login, BroadcasterType.NONE)
@@ -60,11 +58,11 @@ class Watcher:
     def _report(
         self,
         logins: Sequence[str],
-        state: dict[str, BroadcasterType],
+        state: State,
         checks: int,
         errors: int,
     ) -> None:
-        self.notifier.notify_report(logins, state, checks, errors)
+        self.notifier.notify_report(logins, state.logins, checks, errors)
 
     def watch(
         self,

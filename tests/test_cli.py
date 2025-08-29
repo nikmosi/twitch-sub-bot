@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 from twitch_subs import cli
 from twitch_subs.config import Settings
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.domain.models import TwitchAppCreds
+from twitch_subs.domain.models import State, TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
@@ -57,10 +57,10 @@ def test_cli_watch_invokes_watcher(
             return cls()
 
     class DummyStateRepo:
-        def load(self) -> dict[str, Any]:  # noqa: D401
-            return {}
+        def load(self) -> State:  # noqa: D401
+            return State()
 
-        def save(self, state: dict[str, Any]) -> None:  # noqa: D401
+        def save(self, state: State) -> None:  # noqa: D401
             _ = state
             pass
 
