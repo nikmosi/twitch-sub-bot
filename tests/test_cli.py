@@ -6,8 +6,8 @@ from typing import Any, Sequence
 import pytest
 from typer.testing import CliRunner
 
+import twitch_subs.container as container_mod
 from twitch_subs import cli
-from twitch_subs.config import Settings
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import State, TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
@@ -64,16 +64,18 @@ def test_cli_watch_invokes_watcher(
             _ = state
             pass
 
-    monkeypatch.setattr(cli, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
-    monkeypatch.setattr(cli, "TelegramNotifier", DummyNotifier)
-    monkeypatch.setattr(cli, "TelegramWatchlistBot", DummyBot)
-    monkeypatch.setattr(cli, "MemoryStateRepository", lambda: DummyStateRepo())
+    monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
+    monkeypatch.setattr(
+        container_mod, "MemoryStateRepository", lambda: DummyStateRepo()
+    )
 
     calls: dict[str, Any] = {}
 
     def fake_watch(
-        self: cli.Watcher,
+        self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
         stop_event: Event,
@@ -85,7 +87,7 @@ def test_cli_watch_invokes_watcher(
         calls["interval"] = interval
         stop_event.set()
 
-    monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
+    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
 
     def fake_run_bot(bot: Any, stop: Event) -> None:  # noqa: D401
         _ = bot
@@ -120,16 +122,16 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
             _ = creds
             return cls()
 
-    monkeypatch.setattr(cli, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
-    monkeypatch.setattr(cli, "TelegramNotifier", DummyNotifier)
-    monkeypatch.setattr(cli, "TelegramWatchlistBot", DummyBot)
+    monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
     thread_ref: dict[str, Thread] = {}
     stop_holder: dict[str, Event] = {}
 
     def fake_watch(
-        self: cli.Watcher,
+        self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
         stop_event: Event,
@@ -143,7 +145,7 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
         stop_holder["event"] = stop_event
         stop_event.wait()
 
-    monkeypatch.setattr(cli.Watcher, "watch", fake_watch, raising=False)
+    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
 
     def fake_run_bot(bot: Any, stop: Event) -> None:  # noqa: D401
         _ = bot
