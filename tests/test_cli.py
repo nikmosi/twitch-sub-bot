@@ -169,8 +169,7 @@ def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-    settings = Settings()
-    assert cli._get_notifier(settings) is None
+    assert cli._get_notifier() is None
 
 
 def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -178,7 +177,6 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-    settings = Settings()
-    notifier = cli._get_notifier(settings)
+    notifier = cli._get_notifier()
     assert isinstance(notifier, cli.TelegramNotifier)
     assert notifier.token == "t" and notifier.chat_id == "c"
