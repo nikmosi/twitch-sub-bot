@@ -12,7 +12,7 @@ from typing import Sequence
 import typer
 from loguru import logger
 
-from twitch_subs.infrastructure.logings import WatchListLoginProvider
+from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .application.watcher import Watcher
 from .application.watchlist_service import WatchlistService
