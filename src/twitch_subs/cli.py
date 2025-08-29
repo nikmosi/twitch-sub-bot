@@ -14,6 +14,7 @@ from loguru import logger
 
 from twitch_subs.infrastructure.logings import WatchListLoginProvider
 
+from .application.watchlist_service import WatchlistService
 from .application.watcher import Watcher
 from .config import Settings
 from .domain.models import TwitchAppCreds
@@ -88,7 +89,8 @@ def watch(
 ) -> None:
     """Watch Twitch logins and notify Telegram on status changes."""
     repo = build_watchlist_repo()
-    logins = repo.list()
+    service = WatchlistService(repo)
+    logins = service.list()
 
     settings = Settings()
     creds = TwitchAppCreds(
@@ -109,7 +111,7 @@ def watch(
     )
 
     token = settings.telegram_bot_token
-    bot = TelegramWatchlistBot(token, settings.telegram_chat_id, repo)
+    bot = TelegramWatchlistBot(token, settings.telegram_chat_id, service)
 
     stop = Event()
 
@@ -161,12 +163,12 @@ def add(
 ) -> None:
     notifier = _get_notifier()
     repo = build_watchlist_repo()
+    service = WatchlistService(repo)
     for batch in batched(usernames, n=10):
         for username in batch:
-            if repo.exists(username):
+            if not service.add(username):
                 typer.echo(f"{username} already present")
                 continue
-            repo.add(username)
             typer.echo(f"Added {username}")
         if notifier and notify:
             notifier.send_message(
@@ -179,7 +181,8 @@ def add(
 @app.command("list", help="List Twitch usernames in watchlist")
 def list_cmd() -> None:
     repo = build_watchlist_repo()
-    users = repo.list()
+    service = WatchlistService(repo)
+    users = service.list()
     if not users:
         typer.echo("Watchlist is empty. Use 'add' to add usernames.")
         raise typer.Exit(0)
@@ -200,8 +203,9 @@ def remove(
 ) -> None:
     notifier = _get_notifier()
     repo = build_watchlist_repo()
+    service = WatchlistService(repo)
     for username in usernames:
-        removed = repo.remove(username)
+        removed = service.remove(username)
         if removed:
             typer.echo(f"Removed {username}")
             if notifier and notify:
