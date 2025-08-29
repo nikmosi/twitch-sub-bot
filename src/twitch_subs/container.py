@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from twitch_subs.application.watchlist_service import WatchlistService
+
 from .application.watcher import Watcher
 from .config import Settings
 from .domain.models import TwitchAppCreds
-from .infrastructure.env import get_db_echo, get_db_url
 from .infrastructure.repository_sqlite import SqliteWatchlistRepository
 from .infrastructure.state import MemoryStateRepository
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
@@ -23,9 +24,15 @@ class Container:
     _state_repo: MemoryStateRepository | None = None
 
     @property
+    def watchlist_service(self) -> WatchlistService:
+        return WatchlistService(self.watchlist_repo)
+
+    @property
     def watchlist_repo(self) -> SqliteWatchlistRepository:
         if self._watchlist_repo is None:
-            self._watchlist_repo = SqliteWatchlistRepository(get_db_url(), get_db_echo())
+            self._watchlist_repo = SqliteWatchlistRepository(
+                self.settings.database_url, self.settings.database_echo
+            )
         return self._watchlist_repo
 
     @property
@@ -58,5 +65,7 @@ class Container:
 
     def build_bot(self) -> TelegramWatchlistBot:
         return TelegramWatchlistBot(
-            self.settings.telegram_bot_token, self.settings.telegram_chat_id, self.watchlist_repo
+            self.settings.telegram_bot_token,
+            self.settings.telegram_chat_id,
+            self.watchlist_service,
         )

@@ -148,7 +148,7 @@ def add(
 ) -> None:
     container = Container(Settings())
     notifier = _get_notifier(container)
-    repo = container.watchlist_repo
+    service = container.watchlist_service
     for batch in batched(usernames, n=10):
         for username in batch:
             if not service.add(username):
@@ -187,7 +187,7 @@ def remove(
 ) -> None:
     container = Container(Settings())
     notifier = _get_notifier(container)
-    repo = container.watchlist_repo
+    service = container.watchlist_service
     for username in usernames:
         removed = service.remove(username)
         if removed:
