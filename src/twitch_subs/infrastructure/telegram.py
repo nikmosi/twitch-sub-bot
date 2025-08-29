@@ -27,10 +27,12 @@ class TelegramNotifier(NotifierProtocol):
         display = user.display_name if user else status.login
         badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
         subflag = "да" if curr.is_subscribable() else "нет"
+        login = status.login
         text = (
             f"{badge} <b>{display}</b> стал <b>{curr.value}</b>\n"
             f"Подписка доступна: <b>{subflag}</b>\n"
-            f"Логин: <code>{status.login}</code>"
+            f"Логин: <code>{login}</code>\n"
+            f'- <a href="https://www.twitch.tv/{login}">link</a>'
         )
         self.send_message(text)
 
