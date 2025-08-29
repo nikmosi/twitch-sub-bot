@@ -73,11 +73,6 @@ Run the test suite:
 uv run pytest
 ```
 
-### Docker
-
-The provided `dockerfile` uses [tini](https://github.com/krallin/tini) as PID 1
-so that `docker stop` (SIGTERM followed by SIGKILL) results in a clean shutdown.
-
 ## License
 Released under the terms of the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
 
