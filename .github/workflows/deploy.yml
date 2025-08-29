@@ -3,18 +3,15 @@
 name: Deploy
 
 on:
-  # Auto deploy to stage on pushes to main
   push:
-    branches: [main]
-  # Manual trigger for prod
-  workflow_dispatch:
+    branches: [main]   # auto-deploy stage on main
+  workflow_dispatch:    # manual prod
 
 jobs:
   deploy_stage:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: stage
-    # Prevent overlapping stage deployments
     concurrency:
       group: deploy-stage
       cancel-in-progress: true
@@ -46,8 +43,7 @@ EOSSH
   deploy_prod:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    environment: prod # Protect this environment in repository settings for manual approval
-    # Prevent overlapping prod deployments
+    environment: prod  # protect this environment for manual approval
     concurrency:
       group: deploy-prod
       cancel-in-progress: true
