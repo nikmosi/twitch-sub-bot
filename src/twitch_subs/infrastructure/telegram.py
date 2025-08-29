@@ -12,10 +12,7 @@ from loguru import logger
 
 from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
-from ..application.watchlist_service import WatchlistService
-from ..config import Settings
-from ..domain.ports import NotifierProtocol
-from . import build_watchlist_repo
+from ..domain.ports import NotifierProtocol, WatchlistRepository
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
@@ -99,10 +96,8 @@ class IDFilter(Filter):
 class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
-    def __init__(
-        self, token: str, chat_id: str, service: WatchlistService | None = None
-    ) -> None:
-        self.service = service or WatchlistService(build_watchlist_repo(Settings()))
+    def __init__(self, token: str, chat_id: str, repo: WatchlistRepository) -> None:
+        self.repo = repo
         self.bot = Bot(token=token)
         self.dispatcher = Dispatcher()
 

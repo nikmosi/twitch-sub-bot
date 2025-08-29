@@ -14,14 +14,9 @@ from loguru import logger
 
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
-from .application.watcher import Watcher
-from .application.watchlist_service import WatchlistService
 from .config import Settings
-from .domain.models import TwitchAppCreds
-from .infrastructure import build_watchlist_repo
-from .infrastructure.state import MemoryStateRepository
+from .container import Container
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
-from .infrastructure.twitch import TwitchClient
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -57,12 +52,14 @@ def at_exit(notifier: TelegramNotifier) -> None:
         pass
 
 
-def _get_notifier(settings: Settings) -> TelegramNotifier | None:
+def _get_notifier(container: Container | None = None) -> TelegramNotifier | None:
     """Return Telegram notifier if credentials are configured."""
-    token = settings.telegram_bot_token
-    chat = settings.telegram_chat_id
+    if container is None:
+        container = Container(Settings())
+    token = container.settings.telegram_bot_token
+    chat = container.settings.telegram_chat_id
     if token and chat:
-        return TelegramNotifier(token, chat)
+        return container.notifier
     return None
 
 
@@ -88,30 +85,18 @@ def watch(
 ) -> None:
     """Watch Twitch logins and notify Telegram on status changes."""
     settings = Settings()
-    repo = build_watchlist_repo(settings)
-    service = WatchlistService(repo)
-    logins = service.list()
 
+    container = Container(settings)
+    repo = container.watchlist_repo
     logins = repo.list()
-    creds = TwitchAppCreds(
-        client_id=settings.twitch_client_id,
-        client_secret=settings.twitch_client_secret,
-    )
-
-    tg_token = settings.telegram_bot_token
-    tg_chat = settings.telegram_chat_id
-
-    twitch = TwitchClient.from_creds(creds)
-    notifier = TelegramNotifier(tg_token, tg_chat)
-    state_repo = MemoryStateRepository()
-    watcher = Watcher(twitch, notifier, state_repo)
+    watcher = container.build_watcher()
+    notifier = container.notifier
 
     logger.info(
         "Starting watch for logins {} with interval {}s", ", ".join(logins), interval
     )
 
-    token = settings.telegram_bot_token
-    bot = TelegramWatchlistBot(token, settings.telegram_chat_id, service)
+    bot = container.build_bot()
 
     stop = Event()
 
@@ -161,10 +146,9 @@ def add(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
-    settings = Settings()
-    notifier = _get_notifier(settings)
-    repo = build_watchlist_repo(settings)
-    service = WatchlistService(repo)
+    container = Container(Settings())
+    notifier = _get_notifier(container)
+    repo = container.watchlist_repo
     for batch in batched(usernames, n=10):
         for username in batch:
             if not service.add(username):
@@ -181,9 +165,7 @@ def add(
 
 @app.command("list", help="List Twitch usernames in watchlist")
 def list_cmd() -> None:
-    settings = Settings()
-    repo = build_watchlist_repo(settings)
-    service = WatchlistService(repo)
+    repo = Container(Settings()).watchlist_repo
     users = repo.list()
     if not users:
         typer.echo("Watchlist is empty. Use 'add' to add usernames.")
@@ -203,10 +185,9 @@ def remove(
     ),
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
-    settings = Settings()
-    notifier = _get_notifier(settings)
-    repo = build_watchlist_repo(settings)
-    service = WatchlistService(repo)
+    container = Container(Settings())
+    notifier = _get_notifier(container)
+    repo = container.watchlist_repo
     for username in usernames:
         removed = service.remove(username)
         if removed:
