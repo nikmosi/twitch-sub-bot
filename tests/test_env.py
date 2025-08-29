@@ -5,7 +5,7 @@ from twitch_subs.infrastructure import env
 
 def test_get_db_url_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("DB_URL", raising=False)
-    assert env.get_db_url() == "sqlite:///./data.db"
+    assert env.get_db_url() == "sqlite:///./var/data.db"
 
 
 def test_get_db_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -24,6 +24,8 @@ def test_get_db_url_env(monkeypatch: pytest.MonkeyPatch) -> None:
         ("", False),
     ],
 )
-def test_get_db_echo(monkeypatch: pytest.MonkeyPatch, value: str, expected: bool) -> None:
+def test_get_db_echo(
+    monkeypatch: pytest.MonkeyPatch, value: str, expected: bool
+) -> None:
     monkeypatch.setenv("DB_ECHO", value)
     assert env.get_db_echo() is expected
