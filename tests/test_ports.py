@@ -1,4 +1,4 @@
-from twitch_subs.domain.models import BroadcasterType, UserRecord
+from twitch_subs.domain.models import BroadcasterType, State, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
     StateRepositoryProtocol,
@@ -38,18 +38,18 @@ def test_notifier_protocol_subclass() -> None:
 def test_state_repository_protocol_subclass() -> None:
     class Impl(StateRepositoryProtocol):
         def __init__(self) -> None:  # noqa: D401
-            self.saved: dict[str, BroadcasterType] | None = None
+            self.saved: State | None = None
 
-        def load(self) -> dict[str, BroadcasterType]:  # noqa: D401
-            return {}
+        def load(self) -> State:  # noqa: D401
+            return State()
 
-        def save(self, state: dict[str, BroadcasterType]) -> None:  # noqa: D401
+        def save(self, state: State) -> None:  # noqa: D401
             self.saved = state
 
     impl = Impl()
-    assert impl.load() == {}
-    impl.save({"foo": BroadcasterType.NONE})
-    assert impl.saved == {"foo": BroadcasterType.NONE}
+    assert impl.load() == State()
+    impl.save(State({"foo": BroadcasterType.NONE}))
+    assert impl.saved == State({"foo": BroadcasterType.NONE})
 
 
 def test_watchlist_repository_protocol_subclass() -> None:

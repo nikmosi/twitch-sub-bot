@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, Sequence
 
-from .models import BroadcasterType, LoginStatus, UserRecord
+from .models import BroadcasterType, LoginStatus, State, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
@@ -33,8 +33,8 @@ class NotifierProtocol(Protocol):
 
 
 class StateRepositoryProtocol(Protocol):
-    def load(self) -> dict[str, BroadcasterType]: ...
-    def save(self, state: dict[str, BroadcasterType]) -> None: ...
+    def load(self) -> State: ...
+    def save(self, state: State) -> None: ...
 
 
 class WatchlistRepository(Protocol):

@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict
-
-from ..domain.models import BroadcasterType
+from ..domain.models import BroadcasterType, State
 from ..domain.ports import StateRepositoryProtocol
 
 
@@ -10,10 +8,10 @@ class MemoryStateRepository(StateRepositoryProtocol):
     """In-memory state repository used during runtime."""
 
     def __init__(self) -> None:
-        self._state: Dict[str, BroadcasterType] = {}
+        self._state = State()
 
-    def load(self) -> Dict[str, BroadcasterType]:
-        return dict(self._state)
+    def load(self) -> State:
+        return self._state.copy()
 
-    def save(self, state: Dict[str, BroadcasterType]) -> None:
-        self._state = dict(state)
+    def save(self, state: State) -> None:
+        self._state = state.copy()

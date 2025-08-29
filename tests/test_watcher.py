@@ -1,12 +1,12 @@
 import threading
 import time
-from typing import Dict, Sequence
+from typing import Sequence
 
 import pytest
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.watcher import Watcher
-from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, State, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
     StateRepositoryProtocol,
@@ -56,12 +56,12 @@ class DummyTwitch(TwitchClientProtocol):
 
 class DummyState(StateRepositoryProtocol):
     def __init__(self) -> None:
-        self.data: Dict[str, BroadcasterType] = {}
+        self.data = State()
 
-    def load(self) -> Dict[str, BroadcasterType]:
+    def load(self) -> State:
         return self.data
 
-    def save(self, state: Dict[str, BroadcasterType]) -> None:
+    def save(self, state: State) -> None:
         self.data = state
 
 
@@ -91,7 +91,7 @@ def test_run_once_updates_state_and_notifies() -> None:
     state_repo = DummyState()
     watcher = Watcher(twitch, notifier, state_repo)
 
-    state: Dict[str, BroadcasterType] = {}
+    state = State()
     changed = watcher.run_once(["foo"], state)
 
     assert changed is True
@@ -108,7 +108,7 @@ def test_run_once_no_change_does_not_notify() -> None:
     state_repo = DummyState()
     watcher = Watcher(twitch, notifier, state_repo)
 
-    state: Dict[str, BroadcasterType] = {"foo": BroadcasterType.AFFILIATE}
+    state = State({"foo": BroadcasterType.AFFILIATE})
     changed = watcher.run_once(["foo"], state)
 
     assert changed is False
@@ -142,9 +142,7 @@ def test_watcher_no_work_after_stop(monkeypatch: pytest.MonkeyPatch) -> None:
 
     calls = {"count": 0}
 
-    def fake_run_once(
-        self: Watcher, logins: list[str], state: dict[str, BroadcasterType]
-    ) -> bool:  # noqa: D401
+    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
         _ = self
         _ = logins
         _ = state
