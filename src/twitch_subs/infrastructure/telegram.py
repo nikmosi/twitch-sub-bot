@@ -12,7 +12,8 @@ from loguru import logger
 
 from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
-from ..domain.ports import NotifierProtocol, WatchlistRepository
+from ..application.watchlist_service import WatchlistService
+from ..domain.ports import NotifierProtocol
 from . import build_watchlist_repo
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
@@ -98,9 +99,9 @@ class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
     def __init__(
-        self, token: str, chat_id: str, repo: WatchlistRepository | None = None
+        self, token: str, chat_id: str, service: WatchlistService | None = None
     ) -> None:
-        self.repo = repo or build_watchlist_repo()
+        self.service = service or WatchlistService(build_watchlist_repo())
         self.bot = Bot(token=token)
         self.dispatcher = Dispatcher()
 
@@ -117,18 +118,17 @@ class TelegramWatchlistBot:
 
     # ----- pure helpers used by handlers and tests -----
     def _handle_add(self, username: str) -> str:
-        if self.repo.exists(username):
+        if not self.service.add(username):
             return f"{username} already present"
-        self.repo.add(username)
         return f"Added {username}"
 
     def _handle_remove(self, username: str) -> str:
-        if self.repo.remove(username):
+        if self.service.remove(username):
             return f"Removed {username}"
         return f"{username} not found"
 
     def _handle_list(self) -> str:
-        users = self.repo.list()
+        users = self.service.list()
         text = ["📊 <b>List</b>"]
         text.append("")
         for login in users:
