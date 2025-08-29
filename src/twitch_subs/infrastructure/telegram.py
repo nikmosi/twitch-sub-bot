@@ -5,6 +5,7 @@ from typing import Sequence
 
 import httpx
 from aiogram import Bot, Dispatcher, types
+from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from loguru import logger
 
@@ -142,7 +143,7 @@ class TelegramWatchlistBot:
         await message.answer(self._handle_remove(parts[1].strip()))
 
     async def _cmd_list(self, message: types.Message) -> None:
-        await message.answer(self._handle_list())
+        await message.answer(self._handle_list(), parse_mode=ParseMode.HTML)
 
     async def run(self) -> None:
         try:
