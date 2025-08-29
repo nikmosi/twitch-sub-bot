@@ -14,8 +14,8 @@ from loguru import logger
 
 from twitch_subs.infrastructure.logings import WatchListLoginProvider
 
-from .application.watchlist_service import WatchlistService
 from .application.watcher import Watcher
+from .application.watchlist_service import WatchlistService
 from .config import Settings
 from .domain.models import TwitchAppCreds
 from .infrastructure import build_watchlist_repo
@@ -57,9 +57,8 @@ def at_exit(notifier: TelegramNotifier) -> None:
         pass
 
 
-def _get_notifier() -> TelegramNotifier | None:
+def _get_notifier(settings: Settings) -> TelegramNotifier | None:
     """Return Telegram notifier if credentials are configured."""
-    settings = Settings()
     token = settings.telegram_bot_token
     chat = settings.telegram_chat_id
     if token and chat:
@@ -88,11 +87,12 @@ def watch(
     ),
 ) -> None:
     """Watch Twitch logins and notify Telegram on status changes."""
-    repo = build_watchlist_repo()
+    settings = Settings()
+    repo = build_watchlist_repo(settings)
     service = WatchlistService(repo)
     logins = service.list()
 
-    settings = Settings()
+    logins = repo.list()
     creds = TwitchAppCreds(
         client_id=settings.twitch_client_id,
         client_secret=settings.twitch_client_secret,
@@ -161,8 +161,9 @@ def add(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
-    notifier = _get_notifier()
-    repo = build_watchlist_repo()
+    settings = Settings()
+    notifier = _get_notifier(settings)
+    repo = build_watchlist_repo(settings)
     service = WatchlistService(repo)
     for batch in batched(usernames, n=10):
         for username in batch:
@@ -180,9 +181,10 @@ def add(
 
 @app.command("list", help="List Twitch usernames in watchlist")
 def list_cmd() -> None:
-    repo = build_watchlist_repo()
+    settings = Settings()
+    repo = build_watchlist_repo(settings)
     service = WatchlistService(repo)
-    users = service.list()
+    users = repo.list()
     if not users:
         typer.echo("Watchlist is empty. Use 'add' to add usernames.")
         raise typer.Exit(0)
@@ -201,8 +203,9 @@ def remove(
     ),
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
-    notifier = _get_notifier()
-    repo = build_watchlist_repo()
+    settings = Settings()
+    notifier = _get_notifier(settings)
+    repo = build_watchlist_repo(settings)
     service = WatchlistService(repo)
     for username in usernames:
         removed = service.remove(username)

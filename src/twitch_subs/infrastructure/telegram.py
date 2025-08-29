@@ -13,6 +13,7 @@ from loguru import logger
 from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
 from ..application.watchlist_service import WatchlistService
+from ..config import Settings
 from ..domain.ports import NotifierProtocol
 from . import build_watchlist_repo
 
@@ -101,7 +102,7 @@ class TelegramWatchlistBot:
     def __init__(
         self, token: str, chat_id: str, service: WatchlistService | None = None
     ) -> None:
-        self.service = service or WatchlistService(build_watchlist_repo())
+        self.service = service or WatchlistService(build_watchlist_repo(Settings()))
         self.bot = Bot(token=token)
         self.dispatcher = Dispatcher()
 

@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from twitch_subs import cli
+from twitch_subs.config import Settings
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
@@ -166,7 +167,8 @@ def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-    assert cli._get_notifier() is None
+    settings = Settings()
+    assert cli._get_notifier(settings) is None
 
 
 def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -174,6 +176,7 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-    notifier = cli._get_notifier()
+    settings = Settings()
+    notifier = cli._get_notifier(settings)
     assert isinstance(notifier, cli.TelegramNotifier)
     assert notifier.token == "t" and notifier.chat_id == "c"
