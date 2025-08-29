@@ -5,5 +5,6 @@ services:
     env_file: .env
     command: [ "watch" ]
     volumes:
-      - ./var:/app/var:rw
+      - ./var/:/app/var:rw
+      - ./src/:/app/src:rw
     stop_grace_period: 20s

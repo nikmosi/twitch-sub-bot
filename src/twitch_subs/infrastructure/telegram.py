@@ -107,7 +107,7 @@ class TelegramWatchlistBot:
     def _handle_list(self) -> str:
         users = self.repo.list()
         text = ["📊 <b>List</b>"]
-        text.append("Statuses:")
+        text.append("")
         for login in users:
             text.append(f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>')
 
@@ -143,7 +143,11 @@ class TelegramWatchlistBot:
         await message.answer(self._handle_remove(parts[1].strip()))
 
     async def _cmd_list(self, message: types.Message) -> None:
-        await message.answer(self._handle_list(), parse_mode=ParseMode.HTML)
+        await message.answer(
+            self._handle_list(),
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True,
+        )
 
     async def run(self) -> None:
         try:
