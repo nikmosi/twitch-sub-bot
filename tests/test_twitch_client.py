@@ -9,6 +9,7 @@ from twitch_subs.infrastructure.twitch import (
     TwitchAuthError,
     TwitchClient,
 )
+from twitch_subs.domain.models import TwitchAppCreds
 
 
 class FakeResp:
@@ -139,3 +140,17 @@ def test_timeout(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
 def test_missing_creds() -> None:
     with pytest.raises(TwitchAuthError):
         TwitchClient("", "")
+
+
+def test_from_creds() -> None:
+    creds = TwitchAppCreds("cid", "sec")
+    client = TwitchClient.from_creds(creds)
+    assert isinstance(client, TwitchClient)
+
+
+def test_get_user_none(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
+    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+        return FakeResp(200, {"data": []})
+
+    tc = make_client(monkeypatch, fake_get)
+    assert tc.get_user_by_login("foo") is None
