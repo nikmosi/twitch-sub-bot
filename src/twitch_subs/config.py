@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     @field_validator("database_echo", mode="before")
     @classmethod
-    def _parse_db_echo(cls, v: bool | str) -> bool:
+    def _parse_db_echo(cls, v: bool | str) -> bool | str:
         if v == "":
             return False
         return v

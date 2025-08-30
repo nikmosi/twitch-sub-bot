@@ -169,7 +169,7 @@ def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-    assert cli._get_notifier() is None
+    assert cli._get_notifier() is None  # pyright: ignore
 
 
 def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -177,6 +177,6 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-    notifier = cli._get_notifier()
+    notifier = cli._get_notifier()  # pyright: ignore
     assert isinstance(notifier, cli.TelegramNotifier)
     assert notifier.token == "t" and notifier.chat_id == "c"

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from enum import Enum
-from collections.abc import MutableMapping, Iterator
 
 
 class BroadcasterType(str, Enum):
@@ -41,7 +41,9 @@ class LoginStatus:
 class State(MutableMapping[str, BroadcasterType]):
     """Mapping of login names to their last known broadcaster type."""
 
-    logins: dict[str, BroadcasterType] = field(default_factory=dict)
+    logins: dict[str, BroadcasterType] = field(
+        default_factory=dict[str, BroadcasterType]
+    )
 
     def __getitem__(self, key: str) -> BroadcasterType:
         return self.logins[key]
