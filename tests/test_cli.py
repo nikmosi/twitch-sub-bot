@@ -279,7 +279,9 @@ def test_watch_signal_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     assert exit_called["called"]
 
 
-def test_watch_bot_exception_exitcode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_watch_bot_exception_exitcode(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
@@ -317,11 +319,18 @@ def test_watch_bot_exception_exitcode(monkeypatch: pytest.MonkeyPatch, tmp_path:
 
     monkeypatch.setattr(cli, "run_bot", fake_run_bot)
 
-    runner = CliRunner()
-    db = tmp_path / "db.sqlite"
-    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
-    result = runner.invoke(cli.app, ["watch"])
-    assert result.exit_code == 1
+    from loguru import logger
+
+    logger.disable("twitch_subs.cli")
+
+    try:
+        runner = CliRunner()
+        db = tmp_path / "db.sqlite"
+        monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+        result = runner.invoke(cli.app, ["watch"])
+        assert result.exit_code == 1
+    finally:
+        logger.enable("twitch_subs.cli")
 
 
 def test_cli_main_invokes_app(monkeypatch: pytest.MonkeyPatch) -> None:
