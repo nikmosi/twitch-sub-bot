@@ -19,6 +19,6 @@ class Settings(BaseSettings):
     def _parse_db_echo(cls, v: bool | str) -> bool:
         if v == "":
             return False
-        return v
+        return bool(v)
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")

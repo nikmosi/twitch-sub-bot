@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Sequence
+from typing import Any, Sequence
 
 import pytest
 
@@ -201,7 +201,7 @@ def test_watch_immediate_stop(monkeypatch: pytest.MonkeyPatch) -> None:
 
     called = False
 
-    def fake_run_once(self, logins, state):  # type: ignore[override]
+    def fake_run_once(self: Any, logins: Any, state: Any):  # type: ignore[override]
         nonlocal called
         called = True
         return False
@@ -233,7 +233,7 @@ def test_watch_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     called = {}
 
     def fake_notify_report(
-        self,
+        self: Any,
         logins: Sequence[str],
         state: dict[str, BroadcasterType],
         checks: int,

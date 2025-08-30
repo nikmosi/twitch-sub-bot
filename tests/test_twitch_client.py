@@ -21,12 +21,17 @@ class FakeResp:
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
-            raise httpx.HTTPStatusError("error", request=None, response=httpx.Response(self.status_code))
+            raise httpx.HTTPStatusError(
+                "error",
+                request=None,  # pyright: ignore # ty: ignore
+                response=httpx.Response(self.status_code),
+            )
 
 
 @pytest.fixture
 def token_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     """Patch token endpoint to return a valid token."""
+
     def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
         assert url == TWITCH_TOKEN_URL
         assert data["client_id"] == "cid"
@@ -36,17 +41,21 @@ def token_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(httpx, "post", fake_post)
 
 
-def make_client(monkeypatch: pytest.MonkeyPatch, get_func: Any, timeout: float = 10.0) -> TwitchClient:
+def make_client(
+    monkeypatch: pytest.MonkeyPatch, get_func: Any, timeout: float = 10.0
+) -> TwitchClient:
     monkeypatch.setattr(httpx.Client, "get", get_func, raising=False)
     return TwitchClient("cid", "sec", timeout=timeout)
 
 
 def test_get_user_by_login_ok(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
-    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+    def fake_get(self, path: str, params, headers: dict[str, str]):  # type: ignore[override]
         assert path == "/helix/users"
         assert params == {"login": "foo"}
         assert headers["Authorization"].startswith("Bearer ")
-        return FakeResp(200, {"data": [{"id": "1", "login": "foo", "broadcaster_type": "partner"}]})
+        return FakeResp(
+            200, {"data": [{"id": "1", "login": "foo", "broadcaster_type": "partner"}]}
+        )
 
     tc = make_client(monkeypatch, fake_get)
     user = tc.get_user_by_login("foo")
@@ -59,13 +68,15 @@ def test_401_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
         token_calls.append("call")
-        return FakeResp(200, {"access_token": f"tok{len(token_calls)}", "expires_in": 3600})
+        return FakeResp(
+            200, {"access_token": f"tok{len(token_calls)}", "expires_in": 3600}
+        )
 
     monkeypatch.setattr(httpx, "post", fake_post)
 
     calls: list[dict[str, str] | None] = []
 
-    def fake_get(self, path: str, params=None, headers=None):  # type: ignore[override]
+    def fake_get(self, path: str, params: Any, headers: Any):  # type: ignore[override]
         calls.append(headers)
         if len(calls) == 1:
             return FakeResp(401)
@@ -84,7 +95,7 @@ def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
 
     def fake_post(url: str, data: dict[str, Any], timeout: float) -> FakeResp:  # type: ignore[override]
         nonlocal token_calls
-        token_calls += 1
+        token_calls += 1  # ty: ignore
         return FakeResp(200, {"access_token": f"tok{token_calls}", "expires_in": 1})
 
     monkeypatch.setattr(httpx, "post", fake_post)
