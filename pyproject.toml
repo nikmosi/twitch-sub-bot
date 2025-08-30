@@ -14,14 +14,55 @@ dependencies = [
     "aiogram>=3.22.0",
     "sqlalchemy>=2.0",
 ]
+
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 markers = [
     "asyncio",
 ]
+testpaths = ["tests"]
+
+addopts = [
+  "-vv",                    # подробный вывод локально
+  "-rA",                    # причины skip/xfail
+  "--durations=10",         # топ медленных
+  "--maxfail=1",            # быстрый фейл
+# "-n", "auto",             # xdist: параллельно по ядрам
+  "--dist=loadscope",       # балансировка по скоупам
+  "--timeout=30",           # pytest-timeout
+  "--cov=src",              # pytest-cov
+  "--cov-report=term-missing:skip-covered",
+  "--cov-report=xml",
+  "--cov-fail-under=90"     # целевой порог
+]
+
+xfail_strict = true
+
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(levelname)s %(name)s: %(message)s"
+log_cli_date_format = "%H:%M:%S"
+
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+exclude_lines = [
+  "pragma: no cover",
+  "if TYPE_CHECKING:",
+  "if __name__ == .__main__.:",
+]
+
 
 [dependency-groups]
 dev = [
     "pytest>=8.4.1",
     "pytest-cov>=6.2.1",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
 ]
