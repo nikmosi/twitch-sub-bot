@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.domain.models import State, TwitchAppCreds
+from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
@@ -59,21 +59,10 @@ def test_cli_watch_invokes_watcher(
             _ = creds
             return cls()
 
-    class DummyStateRepo:
-        def load(self) -> State:  # noqa: D401
-            return State()
-
-        def save(self, state: State) -> None:  # noqa: D401
-            _ = state
-            pass
-
     monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
-    monkeypatch.setattr(
-        container_mod, "MemoryStateRepository", lambda: DummyStateRepo()
-    )
 
     calls: dict[str, Any] = {}
 

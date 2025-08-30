@@ -1,9 +1,15 @@
 import pytest
 
-from twitch_subs.domain.models import BroadcasterType, State, UserRecord
+from collections.abc import Iterable
+
+from collections.abc import Iterable
+
+import pytest
+
+from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
-    StateRepositoryProtocol,
+    SubscriptionStateRepo,
     TwitchClientProtocol,
     WatchlistRepository,
 )
@@ -64,21 +70,25 @@ def test_watchlist_repo_protocol_param(name: str) -> None:
     assert repo.exists(name)
 
 
-def test_state_repository_protocol_subclass() -> None:
-    class Impl(StateRepositoryProtocol):
+def test_subscription_state_repo_protocol_subclass() -> None:
+    class Impl(SubscriptionStateRepo):
         def __init__(self) -> None:  # noqa: D401
-            self.saved: State | None = None
+            self.data: dict[str, SubState] = {}
 
-        def load(self) -> State:  # noqa: D401
-            return State()
+        def get_sub_state(self, login: str) -> SubState | None:  # noqa: D401
+            return self.data.get(login)
 
-        def save(self, state: State) -> None:  # noqa: D401
-            self.saved = state
+        def upsert_sub_state(self, state: SubState) -> None:  # noqa: D401
+            self.data[state.login] = state
 
-    impl = Impl()
-    assert impl.load() == State()
-    impl.save(State({"foo": BroadcasterType.NONE}))
-    assert impl.saved == State({"foo": BroadcasterType.NONE})
+        def set_many(self, states: Iterable[SubState]) -> None:  # noqa: D401
+            for st in states:
+                self.data[st.login] = st
+
+    repo = Impl()
+    st = SubState("foo", True)
+    repo.upsert_sub_state(st)
+    assert repo.get_sub_state("foo") == st
 
 
 def test_watchlist_repository_protocol_subclass() -> None:

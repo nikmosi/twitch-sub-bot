@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Protocol, Sequence
 
-from .models import BroadcasterType, LoginStatus, State, UserRecord
+from .models import BroadcasterType, LoginStatus, SubState, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
@@ -32,11 +33,6 @@ class NotifierProtocol(Protocol):
     ) -> None: ...
 
 
-class StateRepositoryProtocol(Protocol):
-    def load(self) -> State: ...
-    def save(self, state: State) -> None: ...
-
-
 class WatchlistRepository(Protocol):
     """Persistence abstraction for the watchlist of Twitch logins."""
 
@@ -58,3 +54,11 @@ class WatchlistRepository(Protocol):
     def exists(self, login: str) -> bool:
         """Return ``True`` if *login* is already in the watchlist."""
         ...
+
+
+class SubscriptionStateRepo(Protocol):
+    def get_sub_state(self, login: str) -> SubState | None: ...
+
+    def upsert_sub_state(self, state: SubState) -> None: ...
+
+    def set_many(self, states: Iterable[SubState]) -> None: ...

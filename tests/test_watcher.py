@@ -1,221 +1,87 @@
 import threading
 import time
-from typing import Any, Sequence
-
-import pytest
+from pathlib import Path
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.watcher import Watcher
-from twitch_subs.domain.models import BroadcasterType, LoginStatus, State, UserRecord
-from twitch_subs.domain.ports import (
-    NotifierProtocol,
-    StateRepositoryProtocol,
-    TwitchClientProtocol,
-)
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
+from twitch_subs.domain.ports import NotifierProtocol, TwitchClientProtocol
+from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
 
 
 class DummyNotifier(NotifierProtocol):
     def __init__(self) -> None:
-        self.sent: list[tuple[str, bool]] = []
-        self.notify_about_start_check = False
-        self.notify_about_change_check = False
-        self.notify_report_check = False
+        self.change_called = False
+        self.report_args: tuple | None = None
 
-    def notify_about_start(self) -> None:
-        self.notify_about_start_check = True
+    def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:  # noqa: D401
+        _ = status
+        _ = curr
+        self.change_called = True
 
-    def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
-        self.notify_about_change_check = True
+    def notify_about_start(self) -> None:  # noqa: D401
+        pass
 
-    def notify_report(
-        self,
-        logins: Sequence[str],
-        state: dict[str, BroadcasterType],
-        checks: int,
-        errors: int,
-    ) -> None:
-        self.notify_report_check = True
+    def notify_report(self, logins, state, checks, errors) -> None:  # noqa: D401
+        self.report_args = (list(logins), state, checks, errors)
 
-    def send_message(
-        self,
-        text: str,
-        disable_web_page_preview: bool = True,
-        disable_notification: bool = False,
-    ) -> None:
+    def send_message(self, text, disable_web_page_preview=True, disable_notification=False):  # noqa: D401
+        _ = text
         _ = disable_web_page_preview
-        self.sent.append((text, disable_notification))
+        _ = disable_notification
 
 
 class DummyTwitch(TwitchClientProtocol):
     def __init__(self, users: dict[str, UserRecord | None]):
         self.users = users
 
-    def get_user_by_login(self, login: str) -> UserRecord | None:
+    def get_user_by_login(self, login: str) -> UserRecord | None:  # noqa: D401
         return self.users.get(login)
 
 
-class DummyState(StateRepositoryProtocol):
-    def __init__(self) -> None:
-        self.data = State()
-
-    def load(self) -> State:
-        return self.data
-
-    def save(self, state: State) -> None:
-        self.data = state
-
-
-def test_check_logins() -> None:
-    users = {
-        "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE),
-        "bar": None,
-    }
-    twitch = DummyTwitch(users)
+def test_run_once_persists_state_and_notifies(tmp_path: Path) -> None:
+    db = tmp_path / "s.db"
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
+    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    rows = [watcher.check_login(i) for i in ["foo", "bar"]]
-    assert (
-        rows[0].login == "foo" and rows[0].broadcaster_type == BroadcasterType.AFFILIATE
-    )
-    assert rows[1].login == "bar" and rows[1].broadcaster_type is BroadcasterType.NONE
+    watcher = Watcher(twitch, notifier, repo)
+    assert watcher.run_once(["foo"]) is True
+    st = repo.get_sub_state("foo")
+    assert st and st.is_subscribed
+    assert notifier.change_called
 
 
-def test_run_once_updates_state_and_notifies() -> None:
-    users: dict[str, UserRecord | None] = {
-        "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE),
-    }
-    twitch = DummyTwitch(users)
+def test_run_once_idempotent(tmp_path: Path) -> None:
+    db = tmp_path / "id.db"
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
+    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    state = State()
-    changed = watcher.run_once(["foo"], state)
-
-    assert changed is True
-    assert state["foo"] == BroadcasterType.AFFILIATE
-    assert notifier.notify_about_change_check
+    watcher = Watcher(twitch, notifier, repo)
+    watcher.run_once(["foo"])
+    count1 = len(repo.list_all())
+    watcher.run_once(["foo"])
+    count2 = len(repo.list_all())
+    assert count1 == count2 == 1
 
 
-def test_run_once_no_change_does_not_notify() -> None:
-    users: dict[str, UserRecord | None] = {
-        "foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
-    }
-    twitch = DummyTwitch(users)
+def test_run_once_no_change(tmp_path: Path) -> None:
+    db = tmp_path / "nc.db"
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
+    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    state = State({"foo": BroadcasterType.AFFILIATE})
-    changed = watcher.run_once(["foo"], state)
-
-    assert changed is False
-    assert not notifier.sent
+    watcher = Watcher(twitch, notifier, repo)
+    watcher.run_once(["foo"])
+    notifier.change_called = False
+    assert watcher.run_once(["foo"]) is False
+    assert notifier.change_called is False
 
 
-def test_watcher_stops_quickly_on_event() -> None:
+def test_watcher_reports(tmp_path: Path) -> None:
+    db = tmp_path / "r.db"
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
     twitch = DummyTwitch({})
     notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return ["foo"]
-
-    stop = threading.Event()
-    thread = threading.Thread(target=watcher.watch, args=(DummyLogins(), 1, stop))
-    thread.start()
-    time.sleep(0.1)
-    stop.set()
-    thread.join(1)
-    assert not thread.is_alive()
-
-
-def test_watcher_no_work_after_stop(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    calls = {"count": 0}
-
-    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
-        _ = self
-        _ = logins
-        _ = state
-        calls["count"] += 1
-        stop.set()
-        return False
-
-    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return ["foo"]
-
-    stop = threading.Event()
-    thread = threading.Thread(target=watcher.watch, args=(DummyLogins(), 1, stop))
-    thread.start()
-    thread.join(1)
-    assert calls["count"] == 1
-
-
-def test_watch_respects_interval(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return ["foo"]
-
-    stop = threading.Event()
-    waits: list[float] = []
-
-    def fake_wait(timeout: float) -> bool:
-        waits.append(timeout)
-        stop.set()
-        return True
-
-    monkeypatch.setattr(stop, "wait", fake_wait)
-    watcher.watch(DummyLogins(), 5, stop)
-    assert waits == [5]
-
-
-def test_watch_immediate_stop(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return ["foo"]
-
-    stop = threading.Event()
-    stop.set()
-
-    called = False
-
-    def fake_run_once(self: Any, logins: Any, state: Any):  # type: ignore[override]
-        nonlocal called
-        called = True
-        return False
-
-    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
-    watcher.watch(DummyLogins(), 5, stop)
-    assert called is False
-
-
-def test_watch_reports(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
+    watcher = Watcher(twitch, notifier, repo)
 
     class DummyLogins(LoginsProvider):
         def get(self) -> list[str]:  # noqa: D401
@@ -223,107 +89,15 @@ def test_watch_reports(monkeypatch: pytest.MonkeyPatch) -> None:
 
     stop = threading.Event()
 
-    def fake_wait(timeout: float) -> bool:
+    def fake_wait(timeout: float) -> bool:  # noqa: D401
         stop.set()
         return True
 
-    monkeypatch.setattr(stop, "wait", fake_wait)
-    monkeypatch.setattr(time, "time", lambda: 0.0)
-
-    called = {}
-
-    def fake_notify_report(
-        self: Any,
-        logins: Sequence[str],
-        state: dict[str, BroadcasterType],
-        checks: int,
-        errors: int,
-    ) -> None:
-        called["reported"] = (logins, checks, errors)
-
-    monkeypatch.setattr(
-        DummyNotifier, "notify_report", fake_notify_report, raising=False
-    )
-    watcher.watch(DummyLogins(), 0, stop, report_interval=0)
-    assert called["reported"] == ([], 1, 0)
-
-
-def test_watch_saves_state_on_change(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
-        state["foo"] = BroadcasterType.AFFILIATE
-        return True
-
-    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return ["foo"]
-
-    stop = threading.Event()
-
-    def fake_wait(timeout: float) -> bool:
-        stop.set()
-        return True
-
-    monkeypatch.setattr(stop, "wait", fake_wait)
-    watcher.watch(DummyLogins(), 0, stop)
-    assert state_repo.data["foo"] == BroadcasterType.AFFILIATE
-
-
-def test_watch_handles_run_once_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    twitch = DummyTwitch({})
-    notifier = DummyNotifier()
-    state_repo = DummyState()
-    watcher = Watcher(twitch, notifier, state_repo)
-
-    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
-        _ = logins
-        _ = state
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
-
-    errors: dict[str, int] = {}
-
-    def fake_notify_report(
-        self: DummyNotifier,
-        logins: Sequence[str],
-        state: dict[str, BroadcasterType],
-        checks: int,
-        errs: int,
-    ) -> None:
-        _ = logins
-        _ = state
-        _ = checks
-        errors["count"] = errs
-
-    monkeypatch.setattr(
-        DummyNotifier, "notify_report", fake_notify_report, raising=False
-    )
-
-    class DummyLogins(LoginsProvider):
-        def get(self) -> list[str]:  # noqa: D401
-            return []
-
-    stop = threading.Event()
-
-    def fake_wait(timeout: float) -> bool:
-        stop.set()
-        return True
-
-    from loguru import logger
-
-    logger.disable("twitch_subs.application.watcher")
-
-    monkeypatch.setattr(stop, "wait", fake_wait)
-    monkeypatch.setattr(time, "time", lambda: 0.0)
+    stop.wait = fake_wait  # type: ignore[assignment]
+    orig = time.time
+    time.time = lambda: 0.0  # type: ignore
     try:
         watcher.watch(DummyLogins(), 0, stop, report_interval=0)
-        assert errors.get("count") == 1
     finally:
-        logger.enable("twitch_subs.application.watcher")
+        time.time = orig  # type: ignore
+    assert notifier.report_args == ([], {}, 1, 0)

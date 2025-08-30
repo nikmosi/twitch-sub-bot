@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from enum import Enum
 
 
@@ -35,6 +36,17 @@ class LoginStatus:
     login: str
     broadcaster_type: BroadcasterType
     user: UserRecord | None
+
+
+@dataclass(frozen=True, slots=True)
+class SubState:
+    login: str
+    is_subscribed: bool
+    tier: str | None = None
+    since: datetime | None = None
+    updated_at: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
 
 
 @dataclass

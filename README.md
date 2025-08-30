@@ -8,6 +8,8 @@ Typer-powered CLI and a small Telegram bot for watchlist management.
 ## Features
 - Poll the Twitch Helix API and track broadcaster type changes.
 - Persist the watchlist in SQLite and expose CRUD operations via CLI or bot.
+- Persist per-login subscription state in the same SQLite database
+  (table `subscription_state`).
 - Send formatted Telegram messages for status changes, daily reports and
   lifecycle events.
 - Gracefully handle SIGINT/SIGTERM and persist state between runs.
