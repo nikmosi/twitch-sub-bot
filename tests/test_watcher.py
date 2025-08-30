@@ -302,7 +302,9 @@ def test_watch_handles_run_once_error(monkeypatch: pytest.MonkeyPatch) -> None:
         _ = checks
         errors["count"] = errs
 
-    monkeypatch.setattr(DummyNotifier, "notify_report", fake_notify_report, raising=False)
+    monkeypatch.setattr(
+        DummyNotifier, "notify_report", fake_notify_report, raising=False
+    )
 
     class DummyLogins(LoginsProvider):
         def get(self) -> list[str]:  # noqa: D401
@@ -314,7 +316,14 @@ def test_watch_handles_run_once_error(monkeypatch: pytest.MonkeyPatch) -> None:
         stop.set()
         return True
 
+    from loguru import logger
+
+    logger.disable("twitch_subs.application.watcher")
+
     monkeypatch.setattr(stop, "wait", fake_wait)
     monkeypatch.setattr(time, "time", lambda: 0.0)
-    watcher.watch(DummyLogins(), 0, stop, report_interval=0)
-    assert errors.get("count") == 1
+    try:
+        watcher.watch(DummyLogins(), 0, stop, report_interval=0)
+        assert errors.get("count") == 1
+    finally:
+        logger.enable("twitch_subs.application.watcher")

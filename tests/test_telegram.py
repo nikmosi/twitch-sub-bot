@@ -75,8 +75,15 @@ def test_send_message_swallow_errors(monkeypatch: pytest.MonkeyPatch) -> None:
             raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx, "Client", lambda **_: FailClient())  # pyright: ignore
-    notifier = TelegramNotifier("tok", "chat")
-    notifier.send_message("hi")  # should not raise
+
+    from loguru import logger
+
+    logger.disable("twitch_subs.infrastructure.telegram")
+    try:
+        notifier = TelegramNotifier("tok", "chat")
+        notifier.send_message("hi")  # should not raise
+    finally:
+        logger.enable("twitch_subs.infrastructure.telegram")
 
 
 def test_notify_about_change_formats(monkeypatch: pytest.MonkeyPatch) -> None:
