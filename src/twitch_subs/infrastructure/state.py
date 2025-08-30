@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..domain.models import BroadcasterType, State
+from ..domain.models import State
 from ..domain.ports import StateRepositoryProtocol
 
 
