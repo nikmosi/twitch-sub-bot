@@ -246,3 +246,75 @@ def test_watch_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     watcher.watch(DummyLogins(), 0, stop, report_interval=0)
     assert called["reported"] == ([], 1, 0)
+
+
+def test_watch_saves_state_on_change(monkeypatch: pytest.MonkeyPatch) -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
+        state["foo"] = BroadcasterType.AFFILIATE
+        return True
+
+    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return ["foo"]
+
+    stop = threading.Event()
+
+    def fake_wait(timeout: float) -> bool:
+        stop.set()
+        return True
+
+    monkeypatch.setattr(stop, "wait", fake_wait)
+    watcher.watch(DummyLogins(), 0, stop)
+    assert state_repo.data["foo"] == BroadcasterType.AFFILIATE
+
+
+def test_watch_handles_run_once_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    twitch = DummyTwitch({})
+    notifier = DummyNotifier()
+    state_repo = DummyState()
+    watcher = Watcher(twitch, notifier, state_repo)
+
+    def fake_run_once(self: Watcher, logins: list[str], state: State) -> bool:  # noqa: D401
+        _ = logins
+        _ = state
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(Watcher, "run_once", fake_run_once, raising=False)
+
+    errors: dict[str, int] = {}
+
+    def fake_notify_report(
+        self: DummyNotifier,
+        logins: Sequence[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errs: int,
+    ) -> None:
+        _ = logins
+        _ = state
+        _ = checks
+        errors["count"] = errs
+
+    monkeypatch.setattr(DummyNotifier, "notify_report", fake_notify_report, raising=False)
+
+    class DummyLogins(LoginsProvider):
+        def get(self) -> list[str]:  # noqa: D401
+            return []
+
+    stop = threading.Event()
+
+    def fake_wait(timeout: float) -> bool:
+        stop.set()
+        return True
+
+    monkeypatch.setattr(stop, "wait", fake_wait)
+    monkeypatch.setattr(time, "time", lambda: 0.0)
+    watcher.watch(DummyLogins(), 0, stop, report_interval=0)
+    assert errors.get("count") == 1

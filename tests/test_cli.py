@@ -1,4 +1,7 @@
+import asyncio
+import signal
 import threading
+import time
 from pathlib import Path
 from threading import Event, Thread
 from typing import Any, Sequence
@@ -180,3 +183,154 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     notifier = cli._get_notifier()  # pyright: ignore
     assert isinstance(notifier, cli.TelegramNotifier)
     assert notifier.token == "t" and notifier.chat_id == "c"
+
+
+def test_at_exit_swallows_errors() -> None:
+    class Fail:
+        def send_message(self, *_, **__):  # noqa: D401
+            raise RuntimeError("boom")
+
+    cli.at_exit(Fail())
+
+
+def test_run_bot_runs_and_stops() -> None:
+    stop = Event()
+
+    class Bot:
+        def __init__(self) -> None:
+            self.ran = False
+            self.stopped = False
+
+        async def run(self) -> None:  # noqa: D401
+            self.ran = True
+            await asyncio.sleep(0)
+
+        async def stop(self) -> None:  # noqa: D401
+            self.stopped = True
+
+    bot = Bot()
+    thread = Thread(target=cli.run_bot, args=(bot, stop))
+    thread.start()
+    time.sleep(0.1)
+    stop.set()
+    thread.join(1)
+    assert bot.ran and bot.stopped
+
+
+def test_watch_signal_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+
+    class DummyTwitch:
+        @classmethod
+        def from_creds(cls, creds: TwitchAppCreds):  # noqa: D401
+            _ = creds
+            return cls()
+
+    monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
+
+    def fake_watch(
+        self: container_mod.Watcher,
+        logins: LoginsProvider | Sequence[str],
+        interval: int,
+        stop_event: Event,
+        report_interval: int = 86400,
+    ) -> None:  # noqa: D401
+        _ = self
+        _ = logins
+        _ = interval
+        _ = report_interval
+        stop_event.set()
+
+    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
+
+    def fake_run_bot(bot: Any, stop: Event) -> None:  # noqa: D401
+        _ = bot
+        stop.set()
+
+    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+
+    handlers: dict[int, Any] = {}
+
+    def fake_signal(sig: int, handler: Any) -> None:
+        handlers[sig] = handler
+
+    monkeypatch.setattr(signal, "signal", fake_signal)
+
+    exit_called: dict[str, bool] = {"called": False}
+
+    def fake_at_exit(notifier: Any) -> None:  # noqa: D401
+        _ = notifier
+        exit_called["called"] = True
+
+    monkeypatch.setattr(cli, "at_exit", fake_at_exit)
+
+    runner = CliRunner()
+    db = tmp_path / "db.sqlite"
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    result = runner.invoke(cli.app, ["watch"])
+    assert result.exit_code == 0
+    handlers[signal.SIGTERM](signal.SIGTERM, None)
+    assert exit_called["called"]
+
+
+def test_watch_bot_exception_exitcode(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+
+    class DummyTwitch:
+        @classmethod
+        def from_creds(cls, creds: TwitchAppCreds):  # noqa: D401
+            _ = creds
+            return cls()
+
+    monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
+    monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
+    monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
+
+    def fake_watch(
+        self: container_mod.Watcher,
+        logins: LoginsProvider | Sequence[str],
+        interval: int,
+        stop_event: Event,
+        report_interval: int = 86400,
+    ) -> None:  # noqa: D401
+        _ = self
+        _ = logins
+        _ = interval
+        _ = report_interval
+        stop_event.set()
+
+    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
+
+    def fake_run_bot(bot: Any, stop: Event) -> None:
+        _ = bot
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+
+    runner = CliRunner()
+    db = tmp_path / "db.sqlite"
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    result = runner.invoke(cli.app, ["watch"])
+    assert result.exit_code == 1
+
+
+def test_cli_main_invokes_app(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, bool] = {"done": False}
+
+    class Dummy:
+        def __call__(self) -> None:  # noqa: D401
+            called["done"] = True
+
+    monkeypatch.setattr(cli, "app", Dummy())
+    cli.main()
+    assert called["done"]

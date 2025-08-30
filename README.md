@@ -1,42 +1,51 @@
-# Twitch Subs Checker → Telegram Notifier
+# Twitch Subs Watcher
 
-A small CLI utility that watches a list of Twitch logins and sends a Telegram message when a channel becomes subscribable.
+## Overview
+**twitch_subs** is a Twitch subscriptions and watchlist tracker that sends
+notifications to Telegram when a channel becomes subscribable. It ships with a
+Typer-powered CLI and a small Telegram bot for watchlist management.
 
 ## Features
-- Polls Twitch Helix `/users` API and checks the `broadcaster_type`.
-- Tracks last known status in memory to avoid duplicate notifications during a run.
-- Stores Twitch logins in a local SQLite database and provides CLI commands to manage it.
-- Sends formatted notifications to a Telegram chat using a bot token.
-- Announces start and graceful shutdown in the Telegram chat.
- - Gracefully handles SIGINT/SIGTERM and stops the watcher thread cleanly.
+- Poll the Twitch Helix API and track broadcaster type changes.
+- Persist the watchlist in SQLite and expose CRUD operations via CLI or bot.
+- Send formatted Telegram messages for status changes, daily reports and
+  lifecycle events.
+- Gracefully handle SIGINT/SIGTERM and persist state between runs.
 
-## Installation
+## Architecture
+The project follows a layered design:
 
-### Database
-The application stores the watchlist in a local SQLite database. The path is
-controlled by the `DB_URL` environment variable and defaults to
-`sqlite:///./data.db`. Tables are created automatically on first use.
+- **domain** – core models, ports and domain exceptions.
+- **application** – services such as the watcher and watchlist service.
+- **infrastructure** – adapters for Twitch API, Telegram bot and SQLite
+  repository.
+- **cli** – entry points implemented with [Typer](https://typer.tiangolo.com/).
 
-### Dependencies
-- Python 3.12+
-- [uv](https://docs.uv.dev/) to manage dependencies
+## Technologies
+Python · uv · Typer · SQLite · Telegram Bot API · Twitch API · Docker
 
-## Environment variables and configuration
-Environment variables can be supplied directly or via a `.env` file:
+## Installation & Usage
+### Configuration
+Environment variables (or a `.env` file) control credentials and database
+location:
 
-- `TWITCH_CLIENT_ID`
-- `TWITCH_CLIENT_SECRET`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID` – destination for messages
-- `DB_URL` – optional SQLite database URL (default: `sqlite:///./data.db`)
-- `DB_ECHO` – set to `1` to enable SQLAlchemy echo for debugging
+```
+TWITCH_CLIENT_ID
+TWITCH_CLIENT_SECRET
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID      # destination for messages
+DB_URL                # defaults to sqlite:///./data.db
+DB_ECHO               # set to 1 for SQL echo
+```
 
-Configuration files:
+### Run with Docker Compose
 
-- `.env` – environment variables for local development
+```bash
+docker compose up --build
+```
 
-## Usage
-Manage the watchlist from the CLI:
+### Run locally with uv
+Manage the watchlist:
 
 ```bash
 uv run src/main.py add <login>
@@ -44,35 +53,25 @@ uv run src/main.py list
 uv run src/main.py remove <login>
 ```
 
-Start watching the logins from the watchlist:
+Start the watcher:
 
 ```bash
 uv run src/main.py watch --interval 300
 ```
 
-The optional `--interval` flag controls the polling delay in seconds.
-
-Run the Telegram bot to manage the watchlist directly from a chat:
+Optional: run the Telegram bot to manage the watchlist from chat:
 
 ```bash
 uv run src/main.py bot
 ```
 
-In the bot chat you can send commands:
-
-```
-/list           # show current watchlist
-/add <login>    # add a login
-/remove <login> # remove a login
-```
-
-## Testing
-Run the test suite:
+## Testing & Coverage
 
 ```bash
-uv run pytest
+uv run --frozen pytest --cov=src --cov-report=term-missing
 ```
 
 ## License
-Released under the terms of the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+Released under the terms of the GNU General Public License v3.0. See
+[LICENSE](LICENSE) for details.
 

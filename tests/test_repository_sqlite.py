@@ -30,3 +30,11 @@ def test_add_stores_iso_utc(tmp_path: Path) -> None:
     with repo.engine.connect() as conn:
         ts = conn.execute(text("SELECT created_at FROM watchlist")).scalar_one()
     assert ts.endswith("+00:00")
+
+
+def test_exists(tmp_path: Path) -> None:
+    db = tmp_path / "exists.db"
+    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
+    repo.add("foo")
+    assert repo.exists("foo")
+    assert not repo.exists("bar")

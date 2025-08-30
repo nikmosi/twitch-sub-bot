@@ -1,3 +1,5 @@
+import pytest
+
 from twitch_subs.domain.models import BroadcasterType, State, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
@@ -33,6 +35,33 @@ def test_notifier_protocol_subclass() -> None:
     impl = Impl()
     impl.send_message("hi", False, True)
     assert impl.sent == [("hi", False, True)]
+
+
+@pytest.mark.parametrize("name", ["foo", "bar"])
+def test_watchlist_repo_protocol_param(name: str) -> None:
+    class Impl(WatchlistRepository):
+        def __init__(self) -> None:  # noqa: D401
+            self.data: list[str] = []
+
+        def add(self, login: str) -> None:  # noqa: D401
+            self.data.append(login)
+
+        def remove(self, login: str) -> bool:  # noqa: D401
+            try:
+                self.data.remove(login)
+                return True
+            except ValueError:
+                return False
+
+        def list(self) -> list[str]:  # noqa: D401
+            return sorted(self.data)
+
+        def exists(self, login: str) -> bool:  # noqa: D401
+            return login in self.data
+
+    repo = Impl()
+    repo.add(name)
+    assert repo.exists(name)
 
 
 def test_state_repository_protocol_subclass() -> None:
