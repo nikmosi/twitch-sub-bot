@@ -2,18 +2,15 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Iterable, Sequence
+from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
 
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
 
-from ..domain.models import BroadcasterType, LoginStatus, State
-from ..domain.ports import (
-    NotifierProtocol,
-    StateRepositoryProtocol,
-    TwitchClientProtocol,
-)
+from ..domain.models import BroadcasterType, LoginStatus, SubState
+from ..domain.ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
 
 
 class Watcher:
@@ -23,7 +20,7 @@ class Watcher:
         self,
         twitch: TwitchClientProtocol,
         notifier: NotifierProtocol,
-        state_repo: StateRepositoryProtocol,
+        state_repo: SubscriptionStateRepo,
     ) -> None:
         self.twitch = twitch
         self.notifier = notifier
@@ -36,33 +33,52 @@ class Watcher:
         logger.info("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
-    def run_once(self, logins: Iterable[str], state: State) -> bool:
+    def run_once(self, logins: Iterable[str]) -> bool:
         changed = False
+        updates: list[SubState] = []
         for status in map(self.check_login, logins):
-            prev = state.get(status.login, BroadcasterType.NONE)
-            assert prev is not None
             curr = status.broadcaster_type or BroadcasterType.NONE
-            if prev != curr:
-                state[status.login] = curr
+            prev = self.state_repo.get_sub_state(status.login)
+            prev_sub = prev.is_subscribed if prev else False
+            curr_sub = curr.is_subscribable()
+            if prev_sub != curr_sub:
                 changed = True
                 logger.info(
                     "Status change for {}: {} -> {}",
                     status.login,
-                    prev.value,
+                    (prev.tier if prev and prev.tier else BroadcasterType.NONE.value),
                     curr.value,
                 )
-                if curr.is_subscribable():
+                if curr_sub:
                     self.notifier.notify_about_change(status, curr)
+            since = prev.since if prev and prev_sub and curr_sub else (
+                datetime.now(timezone.utc) if curr_sub else None
+            )
+            updates.append(
+                SubState(
+                    login=status.login,
+                    is_subscribed=curr_sub,
+                    tier=curr.value if curr_sub else None,
+                    since=since,
+                )
+            )
+        self.state_repo.set_many(updates)
         return changed
 
     def _report(
         self,
         logins: Sequence[str],
-        state: State,
         checks: int,
         errors: int,
     ) -> None:
-        self.notifier.notify_report(logins, state.logins, checks, errors)
+        state: dict[str, BroadcasterType] = {}
+        for login in logins:
+            s = self.state_repo.get_sub_state(login)
+            if s and s.is_subscribed and s.tier:
+                state[login] = BroadcasterType(s.tier)
+            else:
+                state[login] = BroadcasterType.NONE
+        self.notifier.notify_report(logins, state, checks, errors)
 
     def watch(
         self,
@@ -73,7 +89,6 @@ class Watcher:
     ) -> None:
         """Run the watcher until *stop_event* is set."""
 
-        state = self.state_repo.load()
         self.notifier.notify_about_start()
         next_report = time.time() + report_interval
         checks = 0
@@ -82,15 +97,12 @@ class Watcher:
             checks += 1
             all_logins = logins.get()
             try:
-                changed = self.run_once(all_logins, state)
-                if changed:
-                    logger.info("State changed, saving")
-                    self.state_repo.save(state)
+                self.run_once(all_logins)
             except Exception as e:
                 errors += 1
                 logger.exception(f"Run once failed: {e}")
             if time.time() >= next_report:
-                self._report(all_logins, state, checks, errors)
+                self._report(all_logins, checks, errors)
                 checks = 0
                 errors = 0
                 next_report += report_interval

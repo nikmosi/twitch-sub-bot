@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import create_engine, text
+from typing import Any
+
 from twitch_subs.application.watchlist_service import WatchlistService
 
 from .application.watcher import Watcher
 from .config import Settings
 from .domain.models import TwitchAppCreds
-from .infrastructure.repository_sqlite import SqliteWatchlistRepository
-from .infrastructure.state import MemoryStateRepository
+from .infrastructure.repository_sqlite import (
+    SqliteSubscriptionStateRepository,
+    SqliteWatchlistRepository,
+    metadata,
+)
 from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 from .infrastructure.twitch import TwitchClient
 
@@ -18,22 +24,40 @@ class Container:
     """Build and provide application dependencies."""
 
     settings: Settings
+    _engine: Any | None = None
     _watchlist_repo: SqliteWatchlistRepository | None = None
+    _sub_state_repo: SqliteSubscriptionStateRepository | None = None
     _twitch: TwitchClient | None = None
     _notifier: TelegramNotifier | None = None
-    _state_repo: MemoryStateRepository | None = None
 
     @property
     def watchlist_service(self) -> WatchlistService:
         return WatchlistService(self.watchlist_repo)
 
     @property
+    def engine(self):
+        if self._engine is None:
+            self._engine = create_engine(
+                self.settings.database_url,
+                echo=self.settings.database_echo,
+                future=True,
+            )
+            with self._engine.begin() as conn:
+                conn.execute(text("PRAGMA journal_mode=WAL"))
+            metadata.create_all(self._engine)
+        return self._engine
+
+    @property
     def watchlist_repo(self) -> SqliteWatchlistRepository:
         if self._watchlist_repo is None:
-            self._watchlist_repo = SqliteWatchlistRepository(
-                self.settings.database_url, self.settings.database_echo
-            )
+            self._watchlist_repo = SqliteWatchlistRepository(self.engine)
         return self._watchlist_repo
+
+    @property
+    def sub_state_repo(self) -> SqliteSubscriptionStateRepository:
+        if self._sub_state_repo is None:
+            self._sub_state_repo = SqliteSubscriptionStateRepository(self.engine)
+        return self._sub_state_repo
 
     @property
     def twitch_client(self) -> TwitchClient:
@@ -54,14 +78,8 @@ class Container:
             )
         return self._notifier
 
-    @property
-    def state_repo(self) -> MemoryStateRepository:
-        if self._state_repo is None:
-            self._state_repo = MemoryStateRepository()
-        return self._state_repo
-
     def build_watcher(self) -> Watcher:
-        return Watcher(self.twitch_client, self.notifier, self.state_repo)
+        return Watcher(self.twitch_client, self.notifier, self.sub_state_repo)
 
     def build_bot(self) -> TelegramWatchlistBot:
         return TelegramWatchlistBot(

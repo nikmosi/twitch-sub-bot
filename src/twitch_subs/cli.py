@@ -22,6 +22,8 @@ app = typer.Typer(
     name="twitch-subs-checker",
     help="Watch Twitch logins and notify Telegram when broadcaster_type becomes affiliate/partner",
 )
+state_app = typer.Typer(help="Inspect subscription state")
+app.add_typer(state_app, name="state")
 
 logger.remove()
 logger.add(sys.stderr, level="INFO")
@@ -75,6 +77,27 @@ def run_bot(bot: TelegramWatchlistBot, stop: Event) -> None:
             await task
 
     asyncio.run(_runner())
+
+
+@state_app.command("get", help="Get stored state for LOGIN")
+def state_get(login: str) -> None:
+    repo = Container(Settings()).sub_state_repo
+    state = repo.get_sub_state(login)
+    if state is None:
+        typer.echo("not found", err=True)
+        raise typer.Exit(1)
+    typer.echo(str(state))
+
+
+@state_app.command("list", help="List all stored subscription states")
+def state_list() -> None:
+    repo = Container(Settings()).sub_state_repo
+    rows = repo.list_all()
+    if not rows:
+        typer.echo("No subscription state found")
+        raise typer.Exit(0)
+    for row in rows:
+        typer.echo(str(row))
 
 
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
