@@ -1,5 +1,6 @@
 from typing import Any
 
+import asyncio
 import httpx
 import pytest
 
@@ -59,7 +60,7 @@ def test_get_user_by_login_ok(monkeypatch: pytest.MonkeyPatch, token_ok: None) -
         )
 
     tc = make_client(monkeypatch, fake_get)
-    user = tc.get_user_by_login("foo")
+    user = asyncio.run(tc.get_user_by_login("foo"))
     assert user and user.login == "foo"
     assert user.broadcaster_type == BroadcasterType.PARTNER
 
@@ -84,7 +85,7 @@ def test_401_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
         return FakeResp(200, {"data": []})
 
     tc = make_client(monkeypatch, fake_get)
-    tc.get_user_by_login("foo")
+    asyncio.run(tc.get_user_by_login("foo"))
     assert len(token_calls) == 2
     first, second = calls
     assert first and first["Client-Id"] == "cid"
@@ -105,8 +106,8 @@ def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
         return FakeResp(200, {"data": []})
 
     tc = make_client(monkeypatch, fake_get)
-    tc.get_user_by_login("foo")
-    tc.get_user_by_login("bar")
+    asyncio.run(tc.get_user_by_login("foo"))
+    asyncio.run(tc.get_user_by_login("bar"))
     assert token_calls == 2
 
 
@@ -116,7 +117,7 @@ def test_5xx_raises(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
 
     tc = make_client(monkeypatch, fake_get)
     with pytest.raises(httpx.HTTPStatusError):
-        tc.get_user_by_login("foo")
+        asyncio.run(tc.get_user_by_login("foo"))
 
 
 def test_rate_limit(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
@@ -125,7 +126,7 @@ def test_rate_limit(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
 
     tc = make_client(monkeypatch, fake_get)
     with pytest.raises(httpx.HTTPStatusError):
-        tc.get_user_by_login("foo")
+        asyncio.run(tc.get_user_by_login("foo"))
 
 
 def test_timeout(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
@@ -134,7 +135,7 @@ def test_timeout(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
 
     tc = make_client(monkeypatch, fake_get)
     with pytest.raises(httpx.TimeoutException):
-        tc.get_user_by_login("foo")
+        asyncio.run(tc.get_user_by_login("foo"))
 
 
 def test_missing_creds() -> None:
@@ -153,4 +154,4 @@ def test_get_user_none(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
         return FakeResp(200, {"data": []})
 
     tc = make_client(monkeypatch, fake_get)
-    assert tc.get_user_by_login("foo") is None
+    assert asyncio.run(tc.get_user_by_login("foo")) is None
