@@ -1,3 +1,4 @@
+import asyncio
 import threading
 import time
 from pathlib import Path
@@ -35,7 +36,7 @@ class DummyTwitch(TwitchClientProtocol):
     def __init__(self, users: dict[str, UserRecord | None]):
         self.users = users
 
-    def get_user_by_login(self, login: str) -> UserRecord | None:  # noqa: D401
+    async def get_user_by_login(self, login: str) -> UserRecord | None:  # noqa: D401
         return self.users.get(login)
 
 
@@ -45,7 +46,7 @@ def test_run_once_persists_state_and_notifies(tmp_path: Path) -> None:
     twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
-    assert watcher.run_once(["foo"]) is True
+    assert asyncio.run(watcher.run_once(["foo"])) is True
     st = repo.get_sub_state("foo")
     assert st and st.is_subscribed
     assert notifier.change_called
@@ -57,9 +58,9 @@ def test_run_once_idempotent(tmp_path: Path) -> None:
     twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
-    watcher.run_once(["foo"])
+    asyncio.run(watcher.run_once(["foo"]))
     count1 = len(repo.list_all())
-    watcher.run_once(["foo"])
+    asyncio.run(watcher.run_once(["foo"]))
     count2 = len(repo.list_all())
     assert count1 == count2 == 1
 
@@ -70,9 +71,9 @@ def test_run_once_no_change(tmp_path: Path) -> None:
     twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
-    watcher.run_once(["foo"])
+    asyncio.run(watcher.run_once(["foo"]))
     notifier.change_called = False
-    assert watcher.run_once(["foo"]) is False
+    assert asyncio.run(watcher.run_once(["foo"])) is False
     assert notifier.change_called is False
 
 
@@ -97,7 +98,7 @@ def test_watcher_reports(tmp_path: Path) -> None:
     orig = time.time
     time.time = lambda: 0.0  # type: ignore
     try:
-        watcher.watch(DummyLogins(), 0, stop, report_interval=0)
+        asyncio.run(watcher.watch(DummyLogins(), 0, stop, report_interval=0))
     finally:
         time.time = orig  # type: ignore
     assert notifier.report_args == ([], {}, 1, 0)

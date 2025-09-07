@@ -66,7 +66,7 @@ def test_cli_watch_invokes_watcher(
 
     calls: dict[str, Any] = {}
 
-    def fake_watch(
+    async def fake_watch(
         self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
@@ -122,7 +122,7 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
     thread_ref: dict[str, Thread] = {}
     stop_holder: dict[str, Event] = {}
 
-    def fake_watch(
+    async def fake_watch(
         self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
@@ -135,7 +135,7 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
         _ = report_interval
         thread_ref["thread"] = threading.current_thread()
         stop_holder["event"] = stop_event
-        stop_event.wait()
+        await asyncio.to_thread(stop_event.wait)
 
     monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
 
@@ -223,7 +223,7 @@ def test_watch_signal_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
-    def fake_watch(
+    async def fake_watch(
         self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
@@ -287,7 +287,7 @@ def test_watch_bot_exception_exitcode(
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
-    def fake_watch(
+    async def fake_watch(
         self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
