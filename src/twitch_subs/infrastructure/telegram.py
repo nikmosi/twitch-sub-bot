@@ -56,7 +56,7 @@ class TelegramNotifier(NotifierProtocol):
             assert broadcastertype is not None
             btype = broadcastertype.value
             text.append(
-                f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>: <b>{btype:>10}</b>'
+                f'• <a href="https://www.twitch.tv/{login}">{f"{login}:":<20}</a> <b>{btype:>5}</b>'
             )
         self.send_message("\n".join(text), disable_notification=True)
 
