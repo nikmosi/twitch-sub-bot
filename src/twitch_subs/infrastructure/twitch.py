@@ -4,6 +4,7 @@ import time
 from typing import Any
 
 import httpx
+from aiolimiter import AsyncLimiter
 from loguru import logger
 
 from ..domain.models import BroadcasterType, TwitchAppCreds, UserRecord
@@ -34,13 +35,14 @@ class TwitchClient(TwitchClientProtocol):
         self._http = httpx.Client(base_url=TWITCH_API, timeout=timeout)
         self._token: str | None = None
         self._token_exp: float = 0.0
+        self._limiter = AsyncLimiter(20, 10)
 
     @classmethod
     def from_creds(cls, creds: TwitchAppCreds) -> "TwitchClient":
         return cls(creds.client_id, creds.client_secret)
 
-    def get_user_by_login(self, login: str) -> UserRecord | None:
-        data = self._get("/helix/users", params={"login": login})
+    async def get_user_by_login(self, login: str) -> UserRecord | None:
+        data = await self._get("/helix/users", params={"login": login})
         items = data.get("data", [])
         if not items:
             return None
@@ -53,11 +55,12 @@ class TwitchClient(TwitchClientProtocol):
             broadcaster_type=BroadcasterType(btype),
         )
 
-    def _get(
+    async def _get(
         self, path: str, *, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         self._ensure_token()
-        r = self._http.get(path, params=params, headers=self._auth_headers())
+        async with self._limiter:
+            r = self._http.get(path, params=params, headers=self._auth_headers())
         if r.status_code == 401:
             logger.warning("Twitch 401: refreshing token and retrying once…")
             self._refresh_app_token()

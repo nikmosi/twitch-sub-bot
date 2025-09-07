@@ -26,17 +26,17 @@ class Watcher:
         self.notifier = notifier
         self.state_repo = state_repo
 
-    def check_login(self, login: str) -> LoginStatus:
+    async def check_login(self, login: str) -> LoginStatus:
         logger.info("Checking login {}", login)
-        user = self.twitch.get_user_by_login(login)
+        user = await self.twitch.get_user_by_login(login)
         btype = BroadcasterType.NONE if user is None else user.broadcaster_type
         logger.info("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
-    def run_once(self, logins: Iterable[str]) -> bool:
+    async def run_once(self, logins: Iterable[str]) -> bool:
         changed = False
         updates: list[SubState] = []
-        for status in map(self.check_login, logins):
+        async for status in (await self.check_login(i) for i in logins):
             curr = status.broadcaster_type or BroadcasterType.NONE
             prev = self.state_repo.get_sub_state(status.login)
             prev_sub = prev.is_subscribed if prev else False
@@ -51,8 +51,10 @@ class Watcher:
                 )
                 if curr_sub:
                     self.notifier.notify_about_change(status, curr)
-            since = prev.since if prev and prev_sub and curr_sub else (
-                datetime.now(timezone.utc) if curr_sub else None
+            since = (
+                prev.since
+                if prev and prev_sub and curr_sub
+                else (datetime.now(timezone.utc) if curr_sub else None)
             )
             updates.append(
                 SubState(
@@ -80,7 +82,7 @@ class Watcher:
                 state[login] = BroadcasterType.NONE
         self.notifier.notify_report(logins, state, checks, errors)
 
-    def watch(
+    async def watch(
         self,
         logins: LoginsProvider,
         interval: int,
@@ -97,7 +99,7 @@ class Watcher:
             checks += 1
             all_logins = logins.get()
             try:
-                self.run_once(all_logins)
+                await self.run_once(all_logins)
             except Exception as e:
                 errors += 1
                 logger.exception(f"Run once failed: {e}")

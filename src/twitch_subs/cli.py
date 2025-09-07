@@ -135,7 +135,7 @@ def watch(
 
     def _run_watcher() -> None:
         try:
-            watcher.watch(WatchListLoginProvider(repo), interval, stop)
+            asyncio.run(watcher.watch(WatchListLoginProvider(repo), interval, stop))
         except Exception as exc:  # pragma: no cover - defensive
             thread_error.append(exc)
             stop.set()
@@ -158,7 +158,7 @@ def watch(
             logger.error("Watcher thread did not exit")
             exit_code = 1
         if thread_error:
-            logger.error("Watcher thread raised: %s", thread_error[0])
+            logger.error(f"Watcher thread raised: {thread_error}")
             exit_code = 1
 
     raise typer.Exit(exit_code)
