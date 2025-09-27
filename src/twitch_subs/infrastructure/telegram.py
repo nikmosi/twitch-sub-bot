@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from itertools import batched
-from typing import Sequence
-
-import httpx
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, Filter
@@ -16,13 +14,12 @@ from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
 from ..domain.ports import NotifierProtocol
 
-TELEGRAM_API_BASE = "https://api.telegram.org"
-
-
 class TelegramNotifier(NotifierProtocol):
-    def __init__(self, token: str, chat_id: str):
-        self.token = token
+    def __init__(self, bot: Bot, chat_id: str):
+        self.bot = bot
+        self.token = bot.token
         self.chat_id = chat_id
+        self._loop: asyncio.AbstractEventLoop | None = None
 
     def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
         user = status.user
@@ -68,21 +65,36 @@ class TelegramNotifier(NotifierProtocol):
         disable_web_page_preview: bool = True,
         disable_notification: bool = False,
     ) -> None:
-        url = f"{TELEGRAM_API_BASE}/bot{self.token}/sendMessage"
-        payload = {
-            "chat_id": self.chat_id,
-            "text": text,
-            "disable_web_page_preview": disable_web_page_preview,
-            "disable_notification": disable_notification,
-            "parse_mode": "HTML",
-        }
+        async def _send() -> None:
+            try:
+                await self.bot.send_message(
+                    chat_id=self.chat_id,
+                    text=text,
+                    disable_web_page_preview=disable_web_page_preview,
+                    disable_notification=disable_notification,
+                )
+            except Exception:
+                logger.exception("Telegram send failed")
+
         try:
-            logger.info("Sending Telegram message")
-            with httpx.Client(timeout=15.0) as c:
-                r = c.post(url, json=payload)
-                r.raise_for_status()
-        except Exception:
-            logger.exception("Telegram send failed")
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop is not None:
+            self._loop = loop
+            loop.create_task(_send())
+            return
+
+        loop = self._loop
+        if loop is not None and loop.is_running():
+            try:
+                loop.call_soon_threadsafe(loop.create_task, _send())
+                return
+            except RuntimeError:
+                pass
+
+        asyncio.run(_send())
 
 
 class IDFilter(Filter):
@@ -99,9 +111,9 @@ class IDFilter(Filter):
 class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
-    def __init__(self, token: str, chat_id: str, service: WatchlistService) -> None:
+    def __init__(self, bot: Bot, chat_id: str, service: WatchlistService) -> None:
         self.service = service
-        self.bot = Bot(token=token)
+        self.bot = bot
         self.dispatcher = Dispatcher()
 
         self.dispatcher.message.register(
@@ -172,10 +184,7 @@ class TelegramWatchlistBot:
         )
 
     async def run(self) -> None:
-        try:
-            await self.dispatcher.start_polling(self.bot, handle_signals=False)  # pyright: ignore
-        finally:
-            await self.bot.session.close()
+        await self.dispatcher.start_polling(self.bot, handle_signals=False)  # pyright: ignore
 
     async def stop(self) -> None:
         await self.dispatcher.stop_polling()
