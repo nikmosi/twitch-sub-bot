@@ -25,7 +25,7 @@
           enable = true;
           name = "ty ${appName} check";
           files = "${appName}/";
-          entry = "sh -c 'cd ./${appName} && source .venv/bin/activate && uvx ty check'";
+          entry = "sh -c 'cd ./${appName} && uv sync --frozen --all-groups && uvx ty check'";
           types = [ "python" ];
         };
       };
