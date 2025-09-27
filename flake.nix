@@ -25,6 +25,7 @@
           enable = true;
           name = "ty ${appName} check";
           files = "${appName}/";
+          excludes = [ "tests/*" ];
           entry = "sh -c 'cd ./${appName} && uv sync --frozen --all-groups && uvx ty check'";
           types = [ "python" ];
         };
