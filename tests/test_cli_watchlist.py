@@ -6,7 +6,14 @@ import pytest
 from typer.testing import CliRunner
 
 from twitch_subs import cli
+import twitch_subs.container as container_mod
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
+
+
+class DummyAiogramBot:
+    def __init__(self, token: str, default: Any | None = None) -> None:  # noqa: D401
+        self.token = token
+        self.default = default
 
 
 def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
@@ -19,6 +26,7 @@ def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     if "TELEGRAM_CHAT_ID" not in os.environ:
         monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     return runner.invoke(cli.app, command)
 
 
