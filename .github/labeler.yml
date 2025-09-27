@@ -1,0 +1,41 @@
+# Apply the documentation label whenever markdown or docs assets change
+Documentation:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - 'docs/**'
+
+# Tag updates that touch the Python source tree
+Python:
+  - changed-files:
+      - any-glob-to-any-file: 'src/**/*.py'
+
+# Highlight pull requests that modify automated tests
+Tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'tests/**'
+          - 'conftest.py'
+
+# Flag dependency or packaging updates
+Dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'pyproject.toml'
+          - 'uv.lock'
+
+# Capture infrastructure and container related changes
+Infrastructure:
+  - changed-files:
+      - any-glob-to-any-file:
+          - 'dockerfile'
+          - 'compose.yml'
+
+# Mark updates to CI configuration files
+CI:
+  - changed-files:
+      - any-glob-to-any-file: '.github/workflows/**'
+
+# Apply the Release label for pull requests merging into the main branch
+Release:
+  - base-branch: '^main$'
