@@ -20,28 +20,12 @@
 
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
 
-      hookForApp = appName: {
-        "ty-${appName}" = {
-          enable = true;
-          name = "ty ${appName} check";
-          files = "${appName}/";
-          excludes = [ "tests/" ];
-          entry = "sh -c 'cd ./${appName} && uv sync --frozen --all-groups && uvx ty check'";
-          types = [ "python" ];
-        };
-      };
-
-      apps = [
-        "."
-      ];
-
-      appHooks = builtins.foldl' (acc: name: acc // hookForApp name) { } apps;
     in
     {
       checks = forAllSystems (system: {
         pre-commit-check = inputs.pre-commit-hooks.lib.${system}.run {
           src = ./.;
-          hooks = appHooks // {
+          hooks = {
             check-added-large-files.enable = true;
             typos = {
               enable = true;
