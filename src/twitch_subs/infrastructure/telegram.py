@@ -14,6 +14,7 @@ from twitch_subs.domain.models import BroadcasterType, LoginStatus
 
 from ..domain.ports import NotifierProtocol
 
+
 class TelegramNotifier(NotifierProtocol):
     def __init__(self, bot: Bot, chat_id: str):
         self.bot = bot
