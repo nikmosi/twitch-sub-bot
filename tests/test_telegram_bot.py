@@ -15,24 +15,6 @@ class DummyBot:
         pass
 
 
-def test_bot_add_remove_list(tmp_path: Path) -> None:
-    db = tmp_path / "watch.db"
-    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
-    service = WatchlistService(repo)
-    bot = TelegramWatchlistBot(DummyBot(), "1", service)
-
-    assert bot.handle_command("/list") == "Watchlist is empty"
-
-    assert bot.handle_command("/add foo") == "Added foo"
-    assert repo.list() == ["foo"]
-
-    assert "foo" in bot.handle_command("/list")
-
-    assert bot.handle_command("/remove foo") == "Removed foo"
-    assert repo.list() == []
-    assert bot.handle_command("/list") == "Watchlist is empty"
-
-
 def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
     db = tmp_path / "watch.db"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")

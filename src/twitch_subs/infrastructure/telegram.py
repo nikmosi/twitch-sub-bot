@@ -139,13 +139,17 @@ class TelegramWatchlistBot:
             return f"Removed {username}"
         return f"{username} not found"
 
-    def _handle_list(self) -> str:
+    def _create_users_list(self) -> list[str]:
         users = self.service.list()
-        text = ["📊 <b>List</b>"]
-        text.append("")
+        text: list[str] = []
         for login in users:
             text.append(f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>')
+        return text
 
+    def _handle_list(self) -> str:
+        text = ["📊 <b>List</b>"]
+        text.append("")
+        users = self._create_users_list()
         if users:
             return "\n".join(text)
         return "Watchlist is empty"
@@ -178,11 +182,13 @@ class TelegramWatchlistBot:
         await message.answer(self._handle_remove(parts[1].strip()))
 
     async def _cmd_list(self, message: types.Message) -> None:
-        await message.answer(
-            self._handle_list(),
-            parse_mode=ParseMode.HTML,
-            disable_web_page_preview=True,
-        )
+        ans = self._handle_list().split("\n")
+        for batch in batched(ans, n=100):
+            await message.answer(
+                "\n".join(batch),
+                parse_mode=ParseMode.HTML,
+                disable_web_page_preview=True,
+            )
 
     async def run(self) -> None:
         try:
