@@ -226,7 +226,7 @@ def remove(
             raise typer.Exit(1)
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover - CLI entry point
     """Entrypoint for the CLI."""
     app()
 
