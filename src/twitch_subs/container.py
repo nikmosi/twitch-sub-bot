@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-from sqlalchemy import create_engine, text
 from typing import Any
+
+from aiogram import Bot
+from aiogram.client.bot import DefaultBotProperties
+from aiogram.enums import ParseMode
+from sqlalchemy import create_engine, text
 
 from twitch_subs.application.watchlist_service import WatchlistService
 
@@ -29,6 +32,7 @@ class Container:
     _sub_state_repo: SqliteSubscriptionStateRepository | None = None
     _twitch: TwitchClient | None = None
     _notifier: TelegramNotifier | None = None
+    _telegram_bot: Bot | None = None
 
     @property
     def watchlist_service(self) -> WatchlistService:
@@ -73,7 +77,7 @@ class Container:
     def notifier(self) -> TelegramNotifier:
         if self._notifier is None:
             self._notifier = TelegramNotifier(
-                self.settings.telegram_bot_token,
+                self.telegram_bot,
                 self.settings.telegram_chat_id,
             )
         return self._notifier
@@ -83,7 +87,16 @@ class Container:
 
     def build_bot(self) -> TelegramWatchlistBot:
         return TelegramWatchlistBot(
-            self.settings.telegram_bot_token,
+            self.telegram_bot,
             self.settings.telegram_chat_id,
             self.watchlist_service,
         )
+
+    @property
+    def telegram_bot(self) -> Bot:
+        if self._telegram_bot is None:
+            self._telegram_bot = Bot(
+                token=self.settings.telegram_bot_token,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+            )
+        return self._telegram_bot

@@ -10,11 +10,16 @@ from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistReposito
 from twitch_subs.infrastructure.telegram import IDFilter, TelegramWatchlistBot
 
 
+class DummyBot:
+    async def session_close(self) -> None:  # pragma: no cover - compatibility helper
+        pass
+
+
 def test_bot_add_remove_list(tmp_path: Path) -> None:
     db = tmp_path / "watch.db"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
     service = WatchlistService(repo)
-    bot = TelegramWatchlistBot("123:ABC", "1", service)
+    bot = TelegramWatchlistBot(DummyBot(), "1", service)
 
     assert bot.handle_command("/list") == "Watchlist is empty"
 
@@ -32,7 +37,7 @@ def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
     db = tmp_path / "watch.db"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
     service = WatchlistService(repo)
-    bot = TelegramWatchlistBot("123:ABC", "1", service)
+    bot = TelegramWatchlistBot(DummyBot(), "1", service)
     bot.handle_command("/add foo")
 
     assert bot.handle_command("/add foo") == "foo already present"
@@ -41,7 +46,7 @@ def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
 
 def test_handle_command_unknown(tmp_path: Path) -> None:
     repo = SqliteWatchlistRepository(f"sqlite:///{tmp_path / 'db.sqlite'}")
-    bot = TelegramWatchlistBot("123:ABC", "1", WatchlistService(repo))
+    bot = TelegramWatchlistBot(DummyBot(), "1", WatchlistService(repo))
     assert bot.handle_command("/foo") == "Unknown command"
 
 
@@ -50,7 +55,7 @@ def test_id_filter_and_handlers(
 ) -> None:
     db = tmp_path / "watch.db"
     service = WatchlistService(SqliteWatchlistRepository(f"sqlite:///{db}"))
-    bot = TelegramWatchlistBot("123:ABC", "1", service)
+    bot = TelegramWatchlistBot(DummyBot(), "1", service)
 
     msg = SimpleNamespace(chat=SimpleNamespace(id=1))
     assert asyncio.run(IDFilter("1")(msg))

@@ -16,9 +16,16 @@ from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
-class DummyNotifier:
-    def __init__(self, token: str, chat_id: str) -> None:  # noqa: D401
+class DummyAiogramBot:
+    def __init__(self, token: str, default: Any | None = None) -> None:  # noqa: D401
         self.token = token
+        self.default = default
+
+
+class DummyNotifier:
+    def __init__(self, bot: Any, chat_id: str) -> None:  # noqa: D401
+        self.bot = bot
+        self.token = getattr(bot, "token", "")
         self.chat_id = chat_id
 
     def send_message(
@@ -34,8 +41,8 @@ class DummyNotifier:
 
 
 class DummyBot:
-    def __init__(self, token: str, id: str, service: Any | None = None) -> None:  # noqa: D401
-        _ = token
+    def __init__(self, bot: Any, id: str, service: Any | None = None) -> None:  # noqa: D401
+        _ = bot
         _ = service
         _ = id
 
@@ -61,6 +68,7 @@ def test_cli_watch_invokes_watcher(
 
     monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
@@ -116,6 +124,7 @@ def test_cli_graceful_shutdown_sets_stop_and_joins(
 
     monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
@@ -169,6 +178,7 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     notifier = cli._get_notifier()  # pyright: ignore
     assert isinstance(notifier, cli.TelegramNotifier)
     assert notifier.token == "t" and notifier.chat_id == "c"
@@ -220,6 +230,7 @@ def test_watch_signal_handler(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -
 
     monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
@@ -284,6 +295,7 @@ def test_watch_bot_exception_exitcode(
 
     monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
     monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
 
