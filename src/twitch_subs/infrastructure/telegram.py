@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from itertools import batched
+
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command, Filter
@@ -18,7 +19,6 @@ from ..domain.ports import NotifierProtocol
 class TelegramNotifier(NotifierProtocol):
     def __init__(self, bot: Bot, chat_id: str):
         self.bot = bot
-        self.token = bot.token
         self.chat_id = chat_id
         self._loop: asyncio.AbstractEventLoop | None = None
 
@@ -185,7 +185,10 @@ class TelegramWatchlistBot:
         )
 
     async def run(self) -> None:
-        await self.dispatcher.start_polling(self.bot, handle_signals=False)  # pyright: ignore
+        try:
+            await self.dispatcher.start_polling(self.bot, handle_signals=False)  # pyright: ignore
+        finally:
+            await self.bot.session.close()
 
     async def stop(self) -> None:
         await self.dispatcher.stop_polling()
