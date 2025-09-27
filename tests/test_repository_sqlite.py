@@ -3,9 +3,7 @@ from pathlib import Path
 from sqlalchemy import text
 
 from datetime import datetime, timezone
-from pathlib import Path
 
-from sqlalchemy import text
 
 from twitch_subs.domain.models import SubState
 from twitch_subs.infrastructure.repository_sqlite import (
@@ -75,5 +73,7 @@ def test_subscription_state_iso(tmp_path: Path) -> None:
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
     repo.upsert_sub_state(SubState("foo", True))
     with repo.engine.connect() as conn:
-        ts = conn.execute(text("SELECT updated_at FROM subscription_state")).scalar_one()
+        ts = conn.execute(
+            text("SELECT updated_at FROM subscription_state")
+        ).scalar_one()
     assert ts.endswith("+00:00")

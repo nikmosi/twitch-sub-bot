@@ -7,7 +7,9 @@ from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
 from twitch_subs.domain.ports import NotifierProtocol, TwitchClientProtocol
-from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
+from twitch_subs.infrastructure.repository_sqlite import (
+    SqliteSubscriptionStateRepository,
+)
 
 
 class DummyNotifier(NotifierProtocol):
@@ -26,7 +28,9 @@ class DummyNotifier(NotifierProtocol):
     def notify_report(self, logins, state, checks, errors) -> None:  # noqa: D401
         self.report_args = (list(logins), state, checks, errors)
 
-    def send_message(self, text, disable_web_page_preview=True, disable_notification=False):  # noqa: D401
+    def send_message(
+        self, text, disable_web_page_preview=True, disable_notification=False
+    ):  # noqa: D401
         _ = text
         _ = disable_web_page_preview
         _ = disable_notification
@@ -43,7 +47,9 @@ class DummyTwitch(TwitchClientProtocol):
 def test_run_once_persists_state_and_notifies(tmp_path: Path) -> None:
     db = tmp_path / "s.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
+    twitch = DummyTwitch(
+        {"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)}
+    )
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
     assert asyncio.run(watcher.run_once(["foo"])) is True
@@ -55,7 +61,9 @@ def test_run_once_persists_state_and_notifies(tmp_path: Path) -> None:
 def test_run_once_idempotent(tmp_path: Path) -> None:
     db = tmp_path / "id.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
+    twitch = DummyTwitch(
+        {"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)}
+    )
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
     asyncio.run(watcher.run_once(["foo"]))
@@ -68,7 +76,9 @@ def test_run_once_idempotent(tmp_path: Path) -> None:
 def test_run_once_no_change(tmp_path: Path) -> None:
     db = tmp_path / "nc.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    twitch = DummyTwitch({"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)})
+    twitch = DummyTwitch(
+        {"foo": UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)}
+    )
     notifier = DummyNotifier()
     watcher = Watcher(twitch, notifier, repo)
     asyncio.run(watcher.run_once(["foo"]))

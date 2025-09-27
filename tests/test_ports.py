@@ -2,11 +2,8 @@ import pytest
 
 from collections.abc import Iterable
 
-from collections.abc import Iterable
 
-import pytest
-
-from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
+from twitch_subs.domain.models import SubState, UserRecord
 from twitch_subs.domain.ports import (
     NotifierProtocol,
     SubscriptionStateRepo,
