@@ -37,4 +37,4 @@ jobs:
           set -euxo pipefail
           PORT="${SSH_PORT:-22}"
           ssh -o StrictHostKeyChecking=no -p "$PORT" "$SSH_USER@$SSH_HOST" \
-            'bash -euxo pipefail -c "cd /root/twitch-sub-bot && docker compose pull && docker compose down && docker compose up -d --build"'
+            'bash -euxo pipefail -c "cd /root/twitch-sub-bot && docker compose pull && docker compose down && docker compose up -d --build --force-recreate"'
