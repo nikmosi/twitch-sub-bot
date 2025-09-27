@@ -66,4 +66,9 @@ dev = [
     "pytest-cov>=6.2.1",
     "pytest-timeout>=2.4.0",
     "pytest-xdist>=3.8.0",
+    "ruff>=0.6.9",
 ]
+
+[tool.ruff]
+target-version = "py312"
+src = ["src", "tests"]
