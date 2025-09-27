@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from itertools import batched
 from typing import Sequence
 
 import httpx
@@ -58,7 +59,8 @@ class TelegramNotifier(NotifierProtocol):
             text.append(
                 f'• <a href="https://www.twitch.tv/{login}">{f"{login}:":<20}</a> <b>{btype:>5}</b>'
             )
-        self.send_message("\n".join(text), disable_notification=True)
+        for batch in batched(text, n=100):
+            self.send_message("\n".join(batch), disable_notification=True)
 
     def send_message(
         self,
