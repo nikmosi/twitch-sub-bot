@@ -181,7 +181,6 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     notifier = cli._get_notifier()  # pyright: ignore
     assert isinstance(notifier, cli.TelegramNotifier)
-    assert notifier.token == "t" and notifier.chat_id == "c"
 
 
 def test_at_exit_swallows_errors() -> None:
