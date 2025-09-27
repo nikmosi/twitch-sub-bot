@@ -176,3 +176,4 @@ pyrightconfig.json
 # End of https://www.toptal.com/developers/gitignore/api/python
 .subs_status.json
 .watchlist.json
+.pre-commit-config.yaml
