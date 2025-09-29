@@ -35,7 +35,7 @@ class TwitchClient(TwitchClientProtocol):
         self._http = httpx.Client(base_url=TWITCH_API, timeout=timeout)
         self._token: str | None = None
         self._token_exp: float = 0.0
-        self._limiter = AsyncLimiter(20, 10)
+        self._limiter = AsyncLimiter(10, 10)
 
     @classmethod
     def from_creds(cls, creds: TwitchAppCreds) -> "TwitchClient":

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import threading
+import asyncio
 import time
 from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
@@ -33,10 +33,12 @@ class Watcher:
         logger.info("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
-    async def run_once(self, logins: Iterable[str]) -> bool:
+    async def run_once(self, logins: Iterable[str], stop_event: asyncio.Event) -> bool:
         changed = False
         updates: list[SubState] = []
         async for status in (await self.check_login(i) for i in logins):
+            if stop_event.is_set():
+                return False
             curr = status.broadcaster_type or BroadcasterType.NONE
             prev = self.state_repo.get_sub_state(status.login)
             prev_sub = prev.is_subscribed if prev else False
@@ -50,7 +52,7 @@ class Watcher:
                     curr.value,
                 )
                 if curr_sub:
-                    self.notifier.notify_about_change(status, curr)
+                    await self.notifier.notify_about_change(status, curr)
             since = (
                 prev.since
                 if prev and prev_sub and curr_sub
@@ -67,7 +69,7 @@ class Watcher:
         self.state_repo.set_many(updates)
         return changed
 
-    def _report(
+    async def _report(
         self,
         logins: Sequence[str],
         checks: int,
@@ -80,32 +82,39 @@ class Watcher:
                 state[login] = BroadcasterType(s.tier)
             else:
                 state[login] = BroadcasterType.NONE
-        self.notifier.notify_report(logins, state, checks, errors)
+        await self.notifier.notify_report(logins, state, checks, errors)
 
     async def watch(
         self,
         logins: LoginsProvider,
         interval: int,
-        stop_event: threading.Event,
+        stop_event: asyncio.Event,
         report_interval: int = 86400,
     ) -> None:
         """Run the watcher until *stop_event* is set."""
 
-        self.notifier.notify_about_start()
+        await self.notifier.notify_about_stop()
+        await self.notifier.notify_about_start()
         next_report = time.time() + report_interval
         checks = 0
         errors = 0
-        while not stop_event.is_set():
-            checks += 1
-            all_logins = logins.get()
-            try:
-                await self.run_once(all_logins)
-            except Exception as e:
-                errors += 1
-                logger.exception(f"Run once failed: {e}")
-            if time.time() >= next_report:
-                self._report(all_logins, checks, errors)
-                checks = 0
-                errors = 0
-                next_report += report_interval
-            stop_event.wait(interval)
+        try:
+            while not stop_event.is_set():
+                checks += 1
+                all_logins = logins.get()
+                try:
+                    await self.run_once(all_logins, stop_event)
+                except Exception as e:
+                    errors += 1
+                    logger.exception(f"Run once failed: {e}")
+                if time.time() >= next_report:
+                    await self._report(all_logins, checks, errors)
+                    checks = 0
+                    errors = 0
+                    next_report += report_interval
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=interval)
+                except TimeoutError:
+                    pass
+        finally:
+            await self.notifier.notify_about_stop()

@@ -6,12 +6,13 @@ import re
 import signal
 import sys
 from itertools import batched
-from threading import Event, Thread
 from typing import Sequence
 
 import typer
 from loguru import logger
 
+from twitch_subs.application.watcher import Watcher
+from twitch_subs.domain.ports import WatchlistRepository
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
@@ -45,15 +46,6 @@ def root() -> None:
     """Root command for twitch-subs-checker."""
 
 
-def at_exit(notifier: TelegramNotifier) -> None:
-    """Send a notification when the watcher stops."""
-    logger.info("Watcher stopped by user")
-    try:
-        notifier.send_message("🔴 <b>Twitch Subs Watcher</b> остановлен.")
-    except Exception:
-        pass
-
-
 def _get_notifier(container: Container | None = None) -> TelegramNotifier | None:
     """Return Telegram notifier if credentials are configured."""
     if container is None:
@@ -65,18 +57,20 @@ def _get_notifier(container: Container | None = None) -> TelegramNotifier | None
     return None
 
 
-def run_bot(bot: TelegramWatchlistBot, stop: Event) -> None:
+async def run_watch(
+    watcher: Watcher, repo: WatchlistRepository, interval: int, stop: asyncio.Event
+):
+    await watcher.watch(WatchListLoginProvider(repo), interval, stop)
+
+
+async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
     """Run Telegram bot until *stop* is set."""
 
-    async def _runner() -> None:
-        loop = asyncio.get_running_loop()
-        task = asyncio.create_task(bot.run())
-        await loop.run_in_executor(None, stop.wait)
-        with contextlib.suppress(asyncio.CancelledError):
-            await bot.stop()
-            await task
-
-    asyncio.run(_runner())
+    task = asyncio.create_task(bot.run())
+    await stop.wait()
+    with contextlib.suppress(asyncio.CancelledError):
+        await bot.stop()
+        await task
 
 
 @state_app.command("get", help="Get stored state for LOGIN")
@@ -102,66 +96,42 @@ def state_list() -> None:
 
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
 def watch(
-    interval: int = typer.Option(
-        300, "--interval", help="Poll interval, seconds (default: 300)"
-    ),
+    interval: int = typer.Option(300, "--interval", help="Poll interval, seconds"),
 ) -> None:
-    """Watch Twitch logins and notify Telegram on status changes."""
+    stop = asyncio.Event()
     settings = Settings()
-
     container = Container(settings)
     repo = container.watchlist_repo
     logins = repo.list()
     watcher = container.build_watcher()
-    notifier = container.notifier
-
-    logger.info(
-        "Starting watch for logins {} with interval {}s", ", ".join(logins), interval
-    )
-
     bot = container.build_bot()
 
-    stop = Event()
+    logger.info(
+        "Starting watch for logins %s with interval %ss", ", ".join(logins), interval
+    )
 
-    def _request_stop(signum: int, _: object | None) -> None:
-        logger.info(f"Received signal {signum=}")
-        at_exit(notifier)
+    def shutdown():
         stop.set()
 
-    signal.signal(signal.SIGTERM, _request_stop)
-    signal.signal(signal.SIGINT, _request_stop)
+    def main() -> int:
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-    thread_error: list[BaseException] = []
+        loop.create_task(run_bot(bot, stop), name="run_bot")
+        loop.create_task(run_watch(watcher, repo, interval, stop), name="run_watch")
 
-    def _run_watcher() -> None:
+        exit_code = 0
         try:
-            asyncio.run(watcher.watch(WatchListLoginProvider(repo), interval, stop))
-        except Exception as exc:  # pragma: no cover - defensive
-            thread_error.append(exc)
-            stop.set()
-
-    watcher_thread = Thread(target=_run_watcher, daemon=False)
-    watcher_thread.start()
-
-    exit_code = 0
-    try:
-        run_bot(bot, stop)
-    except KeyboardInterrupt:  # pragma: no cover - handled via signal
-        stop.set()
-    except Exception as e:
-        logger.exception(f"Bot crashed, {e}")
-        exit_code = 1
-    finally:
-        stop.set()
-        watcher_thread.join(10)
-        if watcher_thread.is_alive():
-            logger.error("Watcher thread did not exit")
+            loop.run_forever()
+        except Exception as e:
+            logger.exception("Worker crashed: %s", e)
             exit_code = 1
-        if thread_error:
-            logger.error(f"Watcher thread raised: {thread_error}")
-            exit_code = 1
+        finally:
+            loop.close()
 
-    raise typer.Exit(exit_code)
+        return exit_code
+
+    raise typer.Exit(main())
 
 
 @app.command("add", help="Add a Twitch username to the watchlist")
@@ -179,9 +149,14 @@ def add(
                 continue
             typer.echo(f"Added {username}")
         if notifier and notify:
-            notifier.send_message(
-                "\n".join(
-                    [f"➕ <code>{i}</code> добавлен в список наблюдения" for i in batch]
+            asyncio.run(
+                notifier.send_message(
+                    "\n".join(
+                        [
+                            f"➕ <code>{i}</code> добавлен в список наблюдения"
+                            for i in batch
+                        ]
+                    )
                 )
             )
 
@@ -216,8 +191,10 @@ def remove(
         if removed:
             typer.echo(f"Removed {username}")
             if notifier and notify:
-                notifier.send_message(
-                    f"➖ <code>{username}</code> удален из списка наблюдения",
+                asyncio.run(
+                    notifier.send_message(
+                        f"➖ <code>{username}</code> удален из списка наблюдения",
+                    )
                 )
         else:
             if quiet:

@@ -11,13 +11,14 @@ class TwitchClientProtocol(Protocol):
 
 
 class NotifierProtocol(Protocol):
-    def notify_about_change(
+    async def notify_about_change(
         self, status: LoginStatus, curr: BroadcasterType
     ) -> None: ...
 
-    def notify_about_start(self) -> None: ...
+    async def notify_about_start(self) -> None: ...
+    async def notify_about_stop(self) -> None: ...
 
-    def notify_report(
+    async def notify_report(
         self,
         logins: Sequence[str],
         state: dict[str, BroadcasterType],
@@ -25,7 +26,7 @@ class NotifierProtocol(Protocol):
         errors: int,
     ) -> None: ...
 
-    def send_message(
+    async def send_message(
         self,
         text: str,
         disable_web_page_preview: bool = True,

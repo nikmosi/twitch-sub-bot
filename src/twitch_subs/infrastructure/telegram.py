@@ -22,7 +22,9 @@ class TelegramNotifier(NotifierProtocol):
         self.chat_id = chat_id
         self._loop: asyncio.AbstractEventLoop | None = None
 
-    def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
+    async def notify_about_change(
+        self, status: LoginStatus, curr: BroadcasterType
+    ) -> None:
         user = status.user
         display = user.display_name if user else status.login
         badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
@@ -34,12 +36,15 @@ class TelegramNotifier(NotifierProtocol):
             f"Логин: <code>{login}</code>\n"
             f'- <a href="https://www.twitch.tv/{login}">link</a>'
         )
-        self.send_message(text)
+        await self.send_message(text)
 
-    def notify_about_start(self) -> None:
-        self.send_message("🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю.")
+    async def notify_about_start(self) -> None:
+        await self.send_message("🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю.")
 
-    def notify_report(
+    async def notify_about_stop(self) -> None:
+        await self.send_message("🔴 <b>Twitch Subs Watcher</b> остановлен.")
+
+    async def notify_report(
         self,
         logins: Sequence[str],
         state: dict[str, BroadcasterType],
@@ -58,44 +63,23 @@ class TelegramNotifier(NotifierProtocol):
                 f'• <a href="https://www.twitch.tv/{login}">{f"{login}:":<20}</a> <b>{btype:>5}</b>'
             )
         for batch in batched(text, n=100):
-            self.send_message("\n".join(batch), disable_notification=True)
+            await self.send_message("\n".join(batch), disable_notification=True)
 
-    def send_message(
+    async def send_message(
         self,
         text: str,
         disable_web_page_preview: bool = True,
         disable_notification: bool = False,
     ) -> None:
-        async def _send() -> None:
-            try:
-                await self.bot.send_message(
-                    chat_id=self.chat_id,
-                    text=text,
-                    disable_web_page_preview=disable_web_page_preview,
-                    disable_notification=disable_notification,
-                )
-            except Exception:
-                logger.exception("Telegram send failed")
-
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-
-        if loop is not None:
-            self._loop = loop
-            loop.create_task(_send())
-            return
-
-        loop = self._loop
-        if loop is not None and loop.is_running():
-            try:
-                loop.call_soon_threadsafe(loop.create_task, _send())
-                return
-            except RuntimeError:
-                pass
-
-        asyncio.run(_send())
+            await self.bot.send_message(
+                chat_id=self.chat_id,
+                text=text,
+                disable_web_page_preview=disable_web_page_preview,
+                disable_notification=disable_notification,
+            )
+        except Exception:
+            logger.exception("Telegram send failed")
 
 
 class IDFilter(Filter):
