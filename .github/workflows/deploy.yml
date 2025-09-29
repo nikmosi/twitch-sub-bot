@@ -19,9 +19,6 @@ jobs:
       group: deploy-prod
       cancel-in-progress: true
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
-
       - name: Start SSH agent
         uses: webfactory/ssh-agent@v0.9.1
         with:
@@ -37,4 +34,4 @@ jobs:
           set -euxo pipefail
           PORT="${SSH_PORT:-22}"
           ssh -o StrictHostKeyChecking=no -p "$PORT" "$SSH_USER@$SSH_HOST" \
-            'bash -euxo pipefail -c "cd /root/twitch-sub-bot && docker compose pull && docker compose down && docker compose up -d --build --force-recreate"'
+            'bash -euxo pipefail -c "cd /root/twitch-sub-bot && git pull && docker compose down && docker compose up -d --build --force-recreate"'
