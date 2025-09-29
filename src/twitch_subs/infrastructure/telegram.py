@@ -151,7 +151,7 @@ class TelegramWatchlistBot:
         text.append("")
         users = self._create_users_list()
         if users:
-            return "\n".join(text)
+            return "\n".join(text + users)
         return "Watchlist is empty"
 
     def handle_command(self, text: str) -> str:
