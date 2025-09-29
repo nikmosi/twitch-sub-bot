@@ -93,7 +93,6 @@ class Watcher:
     ) -> None:
         """Run the watcher until *stop_event* is set."""
 
-        await self.notifier.notify_about_stop()
         await self.notifier.notify_about_start()
         next_report = time.time() + report_interval
         checks = 0
