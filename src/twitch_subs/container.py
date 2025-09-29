@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from aiogram import Bot
-from aiogram.client.bot import DefaultBotProperties
+from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from sqlalchemy import create_engine, text
 
