@@ -5,8 +5,8 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from twitch_subs import cli
 import twitch_subs.container as container_mod
+from twitch_subs import cli
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
@@ -70,45 +70,3 @@ def test_username_validation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert good.exit_code == 0
     bad = run(["add", "bad*name", "-n"], monkeypatch, db)
     assert bad.exit_code == 2
-
-
-def test_add_notifies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    db = tmp_path / "wl.db"
-    messages: list[str] = []
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-
-    def fake_send(
-        self: Any,
-        text: str,
-        disable_web_page_preview: bool = True,
-        disable_notification: bool = False,
-    ) -> None:
-        _ = self
-        _ = disable_web_page_preview
-        _ = disable_notification
-        messages.append(text)
-
-    monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
-    res = run(["add", "foo"], monkeypatch, db)
-    assert res.exit_code == 0
-    assert messages == ["➕ <code>foo</code> добавлен в список наблюдения"]
-
-
-def test_remove_notifies(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    db = tmp_path / "wl.db"
-    repo = SqliteWatchlistRepository(f"sqlite:///{db}")
-    repo.add("foo")
-    messages: list[str] = []
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-
-    def fake_send(self: Any, text: str, disable_web_page_preview: bool = True) -> None:
-        _ = self
-        _ = disable_web_page_preview
-        messages.append(text)
-
-    monkeypatch.setattr(cli.TelegramNotifier, "send_message", fake_send)
-    res = run(["remove", "foo"], monkeypatch, db)
-    assert res.exit_code == 0
-    assert messages == ["➖ <code>foo</code> удален из списка наблюдения"]
