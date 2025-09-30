@@ -69,9 +69,16 @@ uv run src/main.py bot
 
 ## Testing & Coverage
 
+Use `uv` to install dependencies and execute the full asynchronous test suite with
+coverage enforcement (95% minimum):
+
 ```bash
 uv run --frozen pytest --cov=src --cov-report=term-missing
 ```
+
+To fail the run when coverage drops below the enforced threshold the command
+already configures `pytest-cov` with `--cov-fail-under=95` in `pyproject.toml`.
+An XML coverage report is produced at `coverage.xml` for CI integrations.
 
 ## License
 Released under the terms of the GNU General Public License v3.0. See

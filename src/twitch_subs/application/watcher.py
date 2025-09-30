@@ -36,7 +36,8 @@ class Watcher:
     async def run_once(self, logins: Iterable[str], stop_event: asyncio.Event) -> bool:
         changed = False
         updates: list[SubState] = []
-        async for status in (await self.check_login(i) for i in logins):
+        for login in logins:
+            status = await self.check_login(login)
             if stop_event.is_set():
                 return False
             curr = status.broadcaster_type or BroadcasterType.NONE
