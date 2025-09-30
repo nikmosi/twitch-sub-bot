@@ -37,7 +37,10 @@ def test_substate_updated_at_defaults_to_utc() -> None:
 
 
 @given(
-    st.dictionaries(keys=st.text(min_size=1, max_size=5), values=st.sampled_from(list(BroadcasterType))),
+    st.dictionaries(
+        keys=st.text(min_size=1, max_size=5),
+        values=st.sampled_from(list(BroadcasterType)),
+    ),
 )
 @settings(max_examples=50)
 def test_state_copy_property(data: dict[str, BroadcasterType]) -> None:

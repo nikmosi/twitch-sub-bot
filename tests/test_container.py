@@ -48,7 +48,9 @@ def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     return Settings()
 
 
-def test_container_singletons(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+def test_container_singletons(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
     monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
     monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
