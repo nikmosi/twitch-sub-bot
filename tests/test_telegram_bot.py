@@ -102,7 +102,9 @@ def test_handle_command_unknown(tmp_path: Path) -> None:
     assert bot.handle_command("/list") == "Watchlist is empty"
 
 
-def test_id_filter_and_handlers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_id_filter_and_handlers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = make_service(tmp_path)
     bot = TelegramWatchlistBot(StubBot(), "1", service)
 
@@ -143,7 +145,9 @@ def test_id_filter_and_handlers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path)
 @pytest.mark.asyncio
 async def test_run_and_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     dispatcher = DummyDispatcher()
-    monkeypatch.setattr("twitch_subs.infrastructure.telegram.Dispatcher", lambda: dispatcher)
+    monkeypatch.setattr(
+        "twitch_subs.infrastructure.telegram.Dispatcher", lambda: dispatcher
+    )
     bot = StubBot()
     service = make_service(tmp_path)
     watch_bot = TelegramWatchlistBot(bot, "1", service)

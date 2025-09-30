@@ -7,7 +7,9 @@ from .models import BroadcasterType, LoginStatus, SubState, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
-    async def get_user_by_login(self, login: str) -> UserRecord | None: ...  # pragma: no cover
+    async def get_user_by_login(
+        self, login: str
+    ) -> UserRecord | None: ...  # pragma: no cover
 
 
 class NotifierProtocol(Protocol):

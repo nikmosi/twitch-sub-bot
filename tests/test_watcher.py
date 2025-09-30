@@ -16,7 +16,11 @@ from twitch_subs.domain.models import (
     SubState,
     UserRecord,
 )
-from twitch_subs.domain.ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
+from twitch_subs.domain.ports import (
+    NotifierProtocol,
+    SubscriptionStateRepo,
+    TwitchClientProtocol,
+)
 
 
 class InMemoryStateRepo(SubscriptionStateRepo):
@@ -50,7 +54,9 @@ class DummyNotifier(NotifierProtocol):
         self.reports: list[tuple[list[str], dict[str, BroadcasterType], int, int]] = []
         self.messages: list[str] = []
 
-    async def notify_about_change(self, status: LoginStatus, curr: BroadcasterType) -> None:
+    async def notify_about_change(
+        self, status: LoginStatus, curr: BroadcasterType
+    ) -> None:
         self.changes.append((status, curr))
 
     async def notify_about_start(self) -> None:
@@ -60,7 +66,11 @@ class DummyNotifier(NotifierProtocol):
         self.stop_called = True
 
     async def notify_report(
-        self, logins: Iterable[str], state: dict[str, BroadcasterType], checks: int, errors: int
+        self,
+        logins: Iterable[str],
+        state: dict[str, BroadcasterType],
+        checks: int,
+        errors: int,
     ) -> None:
         self.reports.append((list(logins), state, checks, errors))
 
@@ -109,12 +119,16 @@ async def test_check_login_found_and_missing(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
-async def test_run_once_transitions_and_notifies(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_once_transitions_and_notifies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixed = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
     class FakeDatetime:
         @classmethod
-        def now(cls, tz: timezone | None = None) -> datetime:  # pragma: no cover - signature helper
+        def now(
+            cls, tz: timezone | None = None
+        ) -> datetime:  # pragma: no cover - signature helper
             assert tz is timezone.utc
             return fixed
 
@@ -162,7 +176,9 @@ async def test_run_once_preserves_since(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.mark.asyncio
-async def test_run_once_stop_event_short_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_run_once_stop_event_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     stop = asyncio.Event()
 
     async def delayed_user(login: str) -> UserRecord | None:
@@ -228,7 +244,9 @@ async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(watcher, "_report", fake_report)
 
     times = iter([0.0, 1.0, 6.0, 7.0])
-    monkeypatch.setattr("twitch_subs.application.watcher.time.time", lambda: next(times))
+    monkeypatch.setattr(
+        "twitch_subs.application.watcher.time.time", lambda: next(times)
+    )
 
     async def fake_wait_for(awaitable: asyncio.Future, timeout: float) -> None:
         task = asyncio.create_task(awaitable)
@@ -241,7 +259,9 @@ async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) ->
             await task
         raise TimeoutError
 
-    monkeypatch.setattr("twitch_subs.application.watcher.asyncio.wait_for", fake_wait_for)
+    monkeypatch.setattr(
+        "twitch_subs.application.watcher.asyncio.wait_for", fake_wait_for
+    )
 
     await watcher.watch(logins, interval=0, stop_event=stop, report_interval=5)
 
@@ -257,4 +277,3 @@ def test_state_copy_roundtrip() -> None:
     cloned = state.copy()
     assert cloned is not state
     assert dict(cloned) == {"foo": BroadcasterType.AFFILIATE}
-

@@ -14,7 +14,9 @@ import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import BroadcasterType, SubState, TwitchAppCreds
-from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
+from twitch_subs.infrastructure.repository_sqlite import (
+    SqliteSubscriptionStateRepository,
+)
 
 
 class DummyAiogramBot:
@@ -87,7 +89,10 @@ class FakeLoop:
 
 
 def test_validate_usernames() -> None:
-    assert cli.validate_usernames(["valid_name", "User123"]) == ["valid_name", "User123"]
+    assert cli.validate_usernames(["valid_name", "User123"]) == [
+        "valid_name",
+        "User123",
+    ]
     with pytest.raises(typer.Exit) as exc:
         cli.validate_usernames(["bad-name"])
     assert exc.value.exit_code == 2
@@ -233,7 +238,9 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
     now = datetime.now(timezone.utc)
     repo.upsert_sub_state(
-        SubState("foo", True, BroadcasterType.AFFILIATE.value, since=now, updated_at=now)
+        SubState(
+            "foo", True, BroadcasterType.AFFILIATE.value, since=now, updated_at=now
+        )
     )
     repo.upsert_sub_state(SubState("bar", False, None, since=None, updated_at=now))
 
@@ -286,7 +293,9 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
 
     fake_loop = FakeLoop()
 
-    async def fake_run_watch(watcher: Any, repo: Any, interval: int, stop: asyncio.Event) -> None:
+    async def fake_run_watch(
+        watcher: Any, repo: Any, interval: int, stop: asyncio.Event
+    ) -> None:
         await asyncio.sleep(0)
         stop.set()
 
