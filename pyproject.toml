@@ -35,7 +35,7 @@ addopts = [
   "--cov=src",              # pytest-cov
   "--cov-report=term-missing:skip-covered",
   "--cov-report=xml",
-  "--cov-fail-under=70"     # целевой порог
+  "--cov-fail-under=95"     # целевой порог
 ]
 
 xfail_strict = true
@@ -65,9 +65,10 @@ dev = [
     "pytest>=8.4.1",
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=6.2.1",
-    "pytest-timeout>=2.4.0",
-    "pytest-xdist>=3.8.0",
-    "ruff>=0.6.9",
+  "pytest-timeout>=2.4.0",
+  "pytest-xdist>=3.8.0",
+  "hypothesis>=6.112.2",
+  "ruff>=0.6.9",
 ]
 
 [tool.ruff]

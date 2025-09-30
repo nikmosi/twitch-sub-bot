@@ -7,16 +7,16 @@ from .models import BroadcasterType, LoginStatus, SubState, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
-    async def get_user_by_login(self, login: str) -> UserRecord | None: ...
+    async def get_user_by_login(self, login: str) -> UserRecord | None: ...  # pragma: no cover
 
 
 class NotifierProtocol(Protocol):
     async def notify_about_change(
         self, status: LoginStatus, curr: BroadcasterType
-    ) -> None: ...
+    ) -> None: ...  # pragma: no cover
 
-    async def notify_about_start(self) -> None: ...
-    async def notify_about_stop(self) -> None: ...
+    async def notify_about_start(self) -> None: ...  # pragma: no cover
+    async def notify_about_stop(self) -> None: ...  # pragma: no cover
 
     async def notify_report(
         self,
@@ -24,14 +24,14 @@ class NotifierProtocol(Protocol):
         state: dict[str, BroadcasterType],
         checks: int,
         errors: int,
-    ) -> None: ...
+    ) -> None: ...  # pragma: no cover
 
     async def send_message(
         self,
         text: str,
         disable_web_page_preview: bool = True,
         disable_notification: bool = False,
-    ) -> None: ...
+    ) -> None: ...  # pragma: no cover
 
 
 class WatchlistRepository(Protocol):
@@ -39,27 +39,27 @@ class WatchlistRepository(Protocol):
 
     def add(self, login: str) -> None:
         """Add *login* to the watchlist. Idempotent."""
-        ...
+        ...  # pragma: no cover
 
     def remove(self, login: str) -> bool:
         """Remove *login* from the watchlist.
 
         Returns ``True`` if the login was present and removed.
         """
-        ...
+        ...  # pragma: no cover
 
     def list(self) -> list[str]:
         """Return all logins from the watchlist sorted alphabetically."""
-        ...
+        ...  # pragma: no cover
 
     def exists(self, login: str) -> bool:
         """Return ``True`` if *login* is already in the watchlist."""
-        ...
+        ...  # pragma: no cover
 
 
 class SubscriptionStateRepo(Protocol):
-    def get_sub_state(self, login: str) -> SubState | None: ...
+    def get_sub_state(self, login: str) -> SubState | None: ...  # pragma: no cover
 
-    def upsert_sub_state(self, state: SubState) -> None: ...
+    def upsert_sub_state(self, state: SubState) -> None: ...  # pragma: no cover
 
-    def set_many(self, states: Iterable[SubState]) -> None: ...
+    def set_many(self, states: Iterable[SubState]) -> None: ...  # pragma: no cover

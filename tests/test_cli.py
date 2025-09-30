@@ -1,14 +1,20 @@
+import asyncio
+import signal
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 from typing import Any, Sequence
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.domain.models import TwitchAppCreds
+from twitch_subs.domain.models import BroadcasterType, SubState, TwitchAppCreds
+from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
 
 
 class DummyAiogramBot:
@@ -43,6 +49,97 @@ class DummyBot:
 
     async def run(self) -> None:  # noqa: D401
         pass
+
+
+def configure_env(monkeypatch: pytest.MonkeyPatch, db: Path) -> None:
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+
+
+class FakeLoop:
+    def __init__(self) -> None:
+        self.signal_handlers: dict[int, Any] = {}
+        self.tasks: list[tuple[Any, str | None]] = []
+        self.closed = False
+
+    def add_signal_handler(self, sig: int, callback: Any) -> None:
+        self.signal_handlers[sig] = callback
+
+    def create_task(self, coro: Any, name: str | None = None) -> SimpleNamespace:
+        self.tasks.append((coro, name))
+        try:
+            coro.close()
+        except RuntimeError:
+            pass
+        return SimpleNamespace(name=name)
+
+    def run_forever(self) -> None:
+        # emulate signal arriving immediately
+        handler = self.signal_handlers.get(signal.SIGTERM)
+        if handler:
+            handler()
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_validate_usernames() -> None:
+    assert cli.validate_usernames(["valid_name", "User123"]) == ["valid_name", "User123"]
+    with pytest.raises(typer.Exit) as exc:
+        cli.validate_usernames(["bad-name"])
+    assert exc.value.exit_code == 2
+
+
+@pytest.mark.asyncio
+async def test_run_watch_invokes_watcher() -> None:
+    class DummyWatcher:
+        def __init__(self) -> None:
+            self.calls: list[tuple[list[str], int]] = []
+
+        async def watch(
+            self, logins: LoginsProvider, interval: int, stop_event: asyncio.Event
+        ) -> None:
+            self.calls.append((logins.get(), interval))
+            stop_event.set()
+
+    class Provider(LoginsProvider):
+        def get(self) -> list[str]:
+            return ["foo"]
+
+    watcher = DummyWatcher()
+    repo = SimpleNamespace(list=lambda: ["foo"])
+    stop = asyncio.Event()
+    await cli.run_watch(watcher, repo, interval=1, stop=stop)
+    assert watcher.calls == [(["foo"], 1)]
+
+
+@pytest.mark.asyncio
+async def test_run_bot_waits_for_stop() -> None:
+    class Bot:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        async def run(self) -> None:
+            self.started = True
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    bot = Bot()
+    stop = asyncio.Event()
+
+    async def trigger() -> None:
+        await asyncio.sleep(0)
+        stop.set()
+
+    trigger_task = asyncio.create_task(trigger())
+    await cli.run_bot(bot, stop)
+    await trigger_task
+    assert bot.started and bot.stopped
 
 
 def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,3 +225,82 @@ def test_cli_main_invokes_app(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(cli, "app", Dummy())
     cli.main()
     assert called["done"]
+
+
+def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    db = tmp_path / "state.db"
+    configure_env(monkeypatch, db)
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
+    now = datetime.now(timezone.utc)
+    repo.upsert_sub_state(
+        SubState("foo", True, BroadcasterType.AFFILIATE.value, since=now, updated_at=now)
+    )
+    repo.upsert_sub_state(SubState("bar", False, None, since=None, updated_at=now))
+
+    runner = CliRunner()
+    get_result = runner.invoke(cli.app, ["state", "get", "foo"])
+    assert get_result.exit_code == 0
+    assert "SubState" in get_result.output
+
+    list_result = runner.invoke(cli.app, ["state", "list"])
+    assert list_result.exit_code == 0
+    assert "foo" in list_result.output and "bar" in list_result.output
+
+    missing = runner.invoke(cli.app, ["state", "get", "missing"])
+    assert missing.exit_code == 1
+
+
+def test_state_list_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    db = tmp_path / "state-empty.db"
+    configure_env(monkeypatch, db)
+    runner = CliRunner()
+    res = runner.invoke(cli.app, ["state", "list"])
+    assert res.exit_code == 0
+    assert "No subscription state found" in res.output
+
+
+def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    db = tmp_path / "watch.db"
+    configure_env(monkeypatch, db)
+
+    class FakeRepo:
+        def list(self) -> list[str]:
+            return ["foo"]
+
+    class FakeContainer:
+        def __init__(self) -> None:
+            self.settings = SimpleNamespace(
+                telegram_bot_token="token", telegram_chat_id="chat"
+            )
+            self.watchlist_repo = FakeRepo()
+
+        @property
+        def watchlist_service(self) -> Any:
+            return SimpleNamespace()
+
+        def build_watcher(self) -> str:
+            return "watcher"
+
+        def build_bot(self) -> str:
+            return "bot"
+
+    fake_loop = FakeLoop()
+
+    async def fake_run_watch(watcher: Any, repo: Any, interval: int, stop: asyncio.Event) -> None:
+        await asyncio.sleep(0)
+        stop.set()
+
+    async def fake_run_bot(bot: Any, stop: asyncio.Event) -> None:
+        await stop.wait()
+
+    monkeypatch.setattr(cli, "Container", lambda _: FakeContainer())
+    monkeypatch.setattr(cli, "run_watch", fake_run_watch)
+    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+    monkeypatch.setattr(cli.asyncio, "get_event_loop", lambda: fake_loop)
+
+    runner = CliRunner()
+    result = runner.invoke(cli.app, ["watch", "--interval", "5"])
+
+    assert result.exit_code == 0
+    assert fake_loop.closed
+    assert [name for _, name in fake_loop.tasks] == ["run_bot", "run_watch"]
