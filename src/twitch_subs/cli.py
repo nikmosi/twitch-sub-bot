@@ -124,7 +124,7 @@ def watch(
         try:
             loop.run_forever()
         except Exception as e:
-            logger.exception("Worker crashed: %s", e)
+            logger.opt(exception=e).exception("Worker crashed")
             exit_code = 1
         finally:
             loop.close()
