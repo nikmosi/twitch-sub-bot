@@ -106,7 +106,7 @@ class Watcher:
                     await self.run_once(all_logins, stop_event)
                 except Exception as e:
                     errors += 1
-                    logger.exception(f"Run once failed: {e}")
+                    logger.opt(exception=e).exception("Run once failed")
                 if time.time() >= next_report:
                     await self._report(all_logins, checks, errors)
                     checks = 0
