@@ -39,6 +39,12 @@ class LoginStatus:
 
 
 @dataclass(frozen=True, slots=True)
+class LoginReportInfo:
+    login: str
+    status: str
+
+
+@dataclass(frozen=True, slots=True)
 class SubState:
     login: str
     is_subscribed: bool

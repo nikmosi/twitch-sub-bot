@@ -9,7 +9,7 @@ from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
 
-from ..domain.models import BroadcasterType, LoginStatus, SubState
+from ..domain.models import BroadcasterType, LoginReportInfo, LoginStatus, SubState
 from ..domain.ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
 
 
@@ -76,14 +76,15 @@ class Watcher:
         checks: int,
         errors: int,
     ) -> None:
-        state: dict[str, BroadcasterType] = {}
+        state: list[LoginReportInfo] = []
         for login in logins:
             s = self.state_repo.get_sub_state(login)
             if s and s.is_subscribed and s.tier:
-                state[login] = BroadcasterType(s.tier)
+                broadcaster_type = BroadcasterType(s.tier)
             else:
-                state[login] = BroadcasterType.NONE
-        await self.notifier.notify_report(logins, state, checks, errors)
+                broadcaster_type = BroadcasterType.NONE
+            state.append(LoginReportInfo(login, broadcaster_type))
+        await self.notifier.notify_report(state, checks, errors)
 
     async def watch(
         self,
