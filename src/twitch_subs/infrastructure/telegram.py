@@ -11,7 +11,7 @@ from aiogram.types import Message
 from loguru import logger
 
 from twitch_subs.application.watchlist_service import WatchlistService
-from twitch_subs.domain.models import BroadcasterType, LoginStatus
+from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, LoginStatus
 
 from ..domain.ports import NotifierProtocol
 
@@ -31,10 +31,9 @@ class TelegramNotifier(NotifierProtocol):
         subflag = "да" if curr.is_subscribable() else "нет"
         login = status.login
         text = (
-            f"{badge} <b>{display}</b> стал <b>{curr.value}</b>\n"
+            f'{badge} <a href="https://www.twitch.tv/{login}">{display}</a> стал <b>{curr.value}</b>\n'
             f"Подписка доступна: <b>{subflag}</b>\n"
             f"Логин: <code>{login}</code>\n"
-            f'- <a href="https://www.twitch.tv/{login}">link</a>'
         )
         await self.send_message(text)
 
@@ -46,8 +45,7 @@ class TelegramNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        logins: Sequence[str],
-        state: dict[str, BroadcasterType],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None:
@@ -55,12 +53,9 @@ class TelegramNotifier(NotifierProtocol):
         text.append(f"Checks: <b>{checks}</b>")
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
-        for login in logins:
-            broadcastertype = state.get(login, BroadcasterType.NONE)
-            assert broadcastertype is not None
-            btype = broadcastertype.value
+        for state in sorted(states, key=lambda a: a.status):
             text.append(
-                f'• <a href="https://www.twitch.tv/{login}">{f"{login}:":<20}</a> <b>{btype:>5}</b>'
+                f'• <b>{state.status:>8}</b> <a href="https://www.twitch.tv/{state.login}">{state.login}</a>'
             )
         for batch in batched(text, n=100):
             await self.send_message("\n".join(batch), disable_notification=True)

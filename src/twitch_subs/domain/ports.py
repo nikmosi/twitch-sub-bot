@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Protocol, Sequence
 
-from .models import BroadcasterType, LoginStatus, SubState, UserRecord
+from .models import BroadcasterType, LoginReportInfo, LoginStatus, SubState, UserRecord
 
 
 class TwitchClientProtocol(Protocol):
@@ -22,8 +22,7 @@ class NotifierProtocol(Protocol):
 
     async def notify_report(
         self,
-        logins: Sequence[str],
-        state: dict[str, BroadcasterType],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None: ...  # pragma: no cover
