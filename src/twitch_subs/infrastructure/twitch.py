@@ -7,8 +7,8 @@ import httpx
 from aiolimiter import AsyncLimiter
 from loguru import logger
 
-from ..domain.models import BroadcasterType, TwitchAppCreds, UserRecord
-from ..domain.ports import TwitchClientProtocol
+from twitch_subs.application.ports import TwitchClientProtocol
+from twitch_subs.domain.models import BroadcasterType, TwitchAppCreds, UserRecord
 
 TWITCH_API = "https://api.twitch.tv"
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"

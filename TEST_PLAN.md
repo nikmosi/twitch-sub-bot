@@ -17,7 +17,7 @@ and additional scenarios required for deterministic, high-signal tests.
 ### `domain/exceptions.py`
 - Verify custom `message()` implementations and inheritance chain.
 
-### `domain/ports.py`
+### `application/ports.py`
 - Runtime smoke checks that concrete fakes implementing each protocol satisfy `isinstance` checks.
 - Ensure docstring-only protocol methods are excluded from coverage or exercised via dummy
   implementations.
@@ -105,4 +105,3 @@ and additional scenarios required for deterministic, high-signal tests.
 - Replace heavy dependencies (aiogram bot/dispatcher) with lightweight fakes mimicking behaviour.
 - Use `freezegun`-style manual patching or helper fixtures to control timestamps.
 - Ensure tests remain deterministic by stubbing `time.time` and `datetime.now` where necessary.
-

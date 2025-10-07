@@ -10,10 +10,9 @@ from aiogram.filters import Command, Filter
 from aiogram.types import Message
 from loguru import logger
 
+from twitch_subs.application.ports import NotifierProtocol
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, LoginStatus
-
-from ..domain.ports import NotifierProtocol
 
 
 class TelegramNotifier(NotifierProtocol):
