@@ -6,7 +6,7 @@ import re
 import signal
 import sys
 from itertools import batched
-from typing import Sequence
+from typing import Any, Sequence
 
 import typer
 from loguru import logger
@@ -27,7 +27,7 @@ state_app = typer.Typer(help="Inspect subscription state")
 app.add_typer(state_app, name="state")
 
 logger.remove()
-logger.add(sys.stderr, level="INFO")
+logger.add(sys.stderr, level="TRACE")
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,25}$", re.ASCII)
 
@@ -106,9 +106,23 @@ def watch(
     watcher = container.build_watcher()
     bot = container.build_bot()
 
+    tasks: list[asyncio.Task[Any]] = []
+
     logger.info(
         "Starting watch for logins %s with interval %ss", ", ".join(logins), interval
     )
+
+    async def wait_stop():
+        timeout = 5000
+        await stop.wait()
+        logger.debug("initial timeout for main tasks")
+
+        waiters = [asyncio.wait_for(t, timeout=timeout) for t in tasks]
+        for t in waiters:
+            try:
+                await t
+            except TimeoutError as e:
+                logger.opt(exception=e).warning(f"{t} can't complete with {timeout} s.")
 
     def shutdown():
         stop.set()
@@ -117,12 +131,18 @@ def watch(
         loop = asyncio.get_event_loop()
         loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-        loop.create_task(run_bot(bot, stop), name="run_bot")
-        loop.create_task(run_watch(watcher, repo, interval, stop), name="run_watch")
+        bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
+        watcher_task = loop.create_task(
+            run_watch(watcher, repo, interval, stop), name="run_watch"
+        )
+
+        tasks.append(bot_task)
+        tasks.append(watcher_task)
 
         exit_code = 0
         try:
-            loop.run_forever()
+            loop.run_until_complete(wait_stop())
+            logger.debug("shutdown")
         except Exception as e:
             logger.opt(exception=e).exception("Worker crashed")
             exit_code = 1
