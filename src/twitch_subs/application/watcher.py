@@ -27,10 +27,10 @@ class Watcher:
         self.state_repo = state_repo
 
     async def check_login(self, login: str) -> LoginStatus:
-        logger.info("Checking login {}", login)
+        logger.trace("Checking login {}", login)
         user = await self.twitch.get_user_by_login(login)
         btype = BroadcasterType.NONE if user is None else user.broadcaster_type
-        logger.info("Login {} status {}", login, btype or "not-found")
+        logger.trace("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
     async def run_once(self, logins: Iterable[str], stop_event: asyncio.Event) -> bool:
@@ -46,7 +46,7 @@ class Watcher:
             curr_sub = curr.is_subscribable()
             if prev_sub != curr_sub:
                 changed = True
-                logger.info(
+                logger.debug(
                     "Status change for {}: {} -> {}",
                     status.login,
                     (prev.tier if prev and prev.tier else BroadcasterType.NONE.value),
