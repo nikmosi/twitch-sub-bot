@@ -96,6 +96,35 @@ def test_container_singletons(
     assert watchlist_bot.service.repo is repo1
 
 
+def test_telegram_bot_reuses_single_session(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
+    monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
+    monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
+
+    created_sessions: list[object] = []
+
+    class DummySession:
+        def __init__(self) -> None:
+            created_sessions.append(self)
+            self.closed = False
+
+        async def close(self) -> None:
+            self.closed = True
+
+    monkeypatch.setattr("twitch_subs.container.AiohttpSession", DummySession)
+
+    container = Container(settings)
+
+    bot1 = container.telegram_bot
+    bot2 = container.telegram_bot
+
+    assert bot1 is bot2
+    assert container._tg_session is bot1.session
+    assert created_sessions == [bot1.session]
+
+
 @pytest.mark.asyncio
 async def test_container_aclose(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
