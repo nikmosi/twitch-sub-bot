@@ -20,12 +20,19 @@ from twitch_subs.infrastructure.telegram import (
 )
 
 
+class StubSession:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class StubBot:
     def __init__(self) -> None:
         self.sent: list[tuple[str, dict[str, Any]]] = []
         self.fail_next = False
-        self.session = SimpleNamespace(close=self._close)
-        self.closed = False
+        self.session = StubSession()
 
     async def send_message(self, **kwargs: Any) -> None:
         if self.fail_next:
@@ -33,9 +40,6 @@ class StubBot:
             raise RuntimeError("boom")
         text = kwargs.pop("text")
         self.sent.append((text, kwargs))
-
-    async def _close(self) -> None:
-        self.closed = True
 
 
 class DummyDispatcher:
@@ -79,6 +83,7 @@ def test_notifier_formats_messages(monkeypatch: pytest.MonkeyPatch) -> None:
         )
     )
     asyncio.run(notifier.notify_about_stop())
+    asyncio.run(notifier.aclose())
 
     assert bot.sent[0][0].startswith("🟢")
     assert "Foo" in bot.sent[1][0]
@@ -165,4 +170,4 @@ async def test_run_and_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     await task
 
     assert dispatcher.started and dispatcher.stopped
-    assert bot.closed
+    assert bot.session.closed

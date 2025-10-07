@@ -75,6 +75,18 @@ class TelegramNotifier(NotifierProtocol):
         except Exception as e:
             logger.opt(exception=e).exception("Telegram send failed")
 
+    async def aclose(self) -> None:
+        """Close underlying bot session if available."""
+
+        session = getattr(self.bot, "session", None)
+        close = getattr(session, "close", None) if session else None
+        if close is None:
+            return
+        closed = getattr(session, "closed", False)
+        if closed:
+            return
+        await close()
+
 
 class IDFilter(Filter):
     def __init__(self, id: str):
