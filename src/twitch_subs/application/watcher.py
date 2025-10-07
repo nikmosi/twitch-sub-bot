@@ -42,9 +42,9 @@ class Watcher:
         changed = False
         updates: list[SubState] = []
         for login in logins:
-            status = await self.check_login(login)
             if stop_event.is_set():
                 return False
+            status = await self.check_login(login)
             curr = status.broadcaster_type or BroadcasterType.NONE
             prev = self.state_repo.get_sub_state(status.login)
             prev_sub = prev.is_subscribed if prev else False
@@ -123,4 +123,5 @@ class Watcher:
                 except TimeoutError:
                     pass
         finally:
-            await self.notifier.notify_about_stop()
+            logger.info("notify_about_stop")
+            await asyncio.shield(self.notifier.notify_about_stop())
