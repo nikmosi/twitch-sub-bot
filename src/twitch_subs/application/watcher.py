@@ -51,7 +51,7 @@ class Watcher:
             curr_sub = curr.is_subscribable()
             if prev_sub != curr_sub:
                 changed = True
-                logger.debug(
+                logger.info(
                     "Status change for {}: {} -> {}",
                     status.login,
                     (prev.tier if prev and prev.tier else BroadcasterType.NONE.value),
