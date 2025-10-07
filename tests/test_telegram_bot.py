@@ -6,7 +6,12 @@ from typing import Any
 import pytest
 
 from twitch_subs.application.watchlist_service import WatchlistService
-from twitch_subs.domain.models import BroadcasterType, LoginStatus, UserRecord
+from twitch_subs.domain.models import (
+    BroadcasterType,
+    LoginReportInfo,
+    LoginStatus,
+    UserRecord,
+)
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import (
     IDFilter,
@@ -68,8 +73,7 @@ def test_notifier_formats_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     asyncio.run(notifier.notify_about_change(status, BroadcasterType.AFFILIATE))
     asyncio.run(
         notifier.notify_report(
-            ["foo", "bar"],
-            {"foo": BroadcasterType.AFFILIATE, "bar": BroadcasterType.NONE},
+            states=[LoginReportInfo(login="Foo", status="aff")],
             checks=5,
             errors=1,
         )
