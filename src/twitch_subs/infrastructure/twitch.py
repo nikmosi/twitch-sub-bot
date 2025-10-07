@@ -75,6 +75,11 @@ class TwitchClient(TwitchClientProtocol):
             "Authorization": f"Bearer {self._token}",
         }
 
+    def close(self) -> None:
+        """Close the underlying HTTP client."""
+
+        self._http.close()
+
     def _ensure_token(self) -> None:
         if not self._token or time.time() >= (self._token_exp - 60):
             self._refresh_app_token()

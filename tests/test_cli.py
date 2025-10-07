@@ -1,5 +1,4 @@
 import asyncio
-import signal
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
@@ -12,6 +11,7 @@ from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
+from twitch_subs.config import Settings
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.models import BroadcasterType, SubState, TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import (
@@ -19,10 +19,19 @@ from twitch_subs.infrastructure.repository_sqlite import (
 )
 
 
+class DummySession:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class DummyAiogramBot:
     def __init__(self, token: str, default: Any | None = None) -> None:  # noqa: D401
         self.token = token
         self.default = default
+        self.session = DummySession()
 
 
 class DummyNotifier:
@@ -42,6 +51,9 @@ class DummyNotifier:
         _ = disable_notification
         pass
 
+    async def aclose(self) -> None:  # noqa: D401
+        await self.bot.session.close()
+
 
 class DummyBot:
     def __init__(self, bot: Any, id: str, service: Any | None = None) -> None:  # noqa: D401
@@ -59,35 +71,6 @@ def configure_env(monkeypatch: pytest.MonkeyPatch, db: Path) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
-
-
-class FakeLoop:
-    def __init__(self) -> None:
-        self.signal_handlers: dict[int, Any] = {}
-        self.tasks: list[tuple[Any, str | None]] = []
-        self.closed = False
-
-    def add_signal_handler(self, sig: int, callback: Any) -> None:
-        self.signal_handlers[sig] = callback
-
-    def create_task(self, coro: Any, name: str | None = None) -> SimpleNamespace:
-        self.tasks.append((coro, name))
-        try:
-            coro.close()
-        except RuntimeError:
-            pass
-        return SimpleNamespace(name=name)
-
-    def run_forever(self) -> None:
-        # emulate signal arriving immediately
-        handler = self.signal_handlers.get(signal.SIGTERM)
-        if handler:
-            handler()
-
-    def close(self) -> None:
-        self.closed = True
-
-
 def test_validate_usernames() -> None:
     assert cli.validate_usernames(["valid_name", "User123"]) == [
         "valid_name",
@@ -152,7 +135,11 @@ def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-    assert cli._get_notifier() is None  # pyright: ignore
+    container = container_mod.Container(Settings())
+    try:
+        assert cli._get_notifier(container) is None
+    finally:
+        asyncio.run(container.aclose())
 
 
 def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -161,8 +148,12 @@ def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
     monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
-    notifier = cli._get_notifier()  # pyright: ignore
-    assert isinstance(notifier, cli.TelegramNotifier)
+    container = container_mod.Container(Settings())
+    try:
+        notifier = cli._get_notifier(container)
+        assert isinstance(notifier, cli.TelegramNotifier)
+    finally:
+        asyncio.run(container.aclose())
 
 
 def test_watch_bot_exception_exitcode(
@@ -280,6 +271,7 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
                 telegram_bot_token="token", telegram_chat_id="chat"
             )
             self.watchlist_repo = FakeRepo()
+            self.closed = False
 
         @property
         def watchlist_service(self) -> Any:
@@ -291,25 +283,32 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         def build_bot(self) -> str:
             return "bot"
 
-    fake_loop = FakeLoop()
+        async def aclose(self) -> None:
+            self.closed = True
+
+    fake_container = FakeContainer()
+    monkeypatch.setattr(cli, "Container", lambda _: fake_container)
+
+    calls = {"watch": False, "bot": False}
 
     async def fake_run_watch(
         watcher: Any, repo: Any, interval: int, stop: asyncio.Event
     ) -> None:
+        calls["watch"] = True
         await asyncio.sleep(0)
         stop.set()
 
     async def fake_run_bot(bot: Any, stop: asyncio.Event) -> None:
+        calls["bot"] = True
         await stop.wait()
 
-    monkeypatch.setattr(cli, "Container", lambda _: FakeContainer())
     monkeypatch.setattr(cli, "run_watch", fake_run_watch)
     monkeypatch.setattr(cli, "run_bot", fake_run_bot)
-    monkeypatch.setattr(cli.asyncio, "get_event_loop", lambda: fake_loop)
 
     runner = CliRunner()
     result = runner.invoke(cli.app, ["watch", "--interval", "5"])
 
     assert result.exit_code == 0
-    assert fake_loop.closed
-    assert [name for _, name in fake_loop.tasks] == ["run_bot", "run_watch"]
+    assert fake_container.closed
+    assert calls["watch"]
+    assert calls["bot"]
