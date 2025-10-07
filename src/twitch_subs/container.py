@@ -96,7 +96,8 @@ class Container:
 
     @property
     def telegram_bot(self) -> Bot:
-        self._tg_session = AiohttpSession()
+        if self._tg_session is None:
+            self._tg_session = AiohttpSession()
         if self._telegram_bot is None:
             self._telegram_bot = Bot(
                 token=self.settings.telegram_bot_token,
@@ -109,10 +110,10 @@ class Container:
         """Release resources created by the container."""
 
         try:
+            if self._telegram_bot is not None:
+                await self._telegram_bot.close()
             if self._tg_session is not None:
                 await self._tg_session.close()
-            if self._telegram_bot:
-                await self._telegram_bot.close()
         finally:
             self._tg_session = None
             self._telegram_bot = None
