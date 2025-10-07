@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
+from aiogram.client.session.aiohttp import AiohttpSession
 
 from twitch_subs.config import Settings
 from twitch_subs.container import Container
@@ -21,18 +22,17 @@ class FakeNotifier:
 
 
 class FakeBot:
-    def __init__(self, token: str, default: object | None = None) -> None:
+    def __init__(
+        self, token: str, session: AiohttpSession, default: object | None = None
+    ) -> None:
         self.token = token
         self.default = default
-        self.session = FakeSession()
+        self.session = session
+        setattr(self.session, "closed", False)
 
-
-class FakeSession:
-    def __init__(self) -> None:
-        self.closed = False
-
-    async def close(self) -> None:
-        self.closed = True
+    async def close(self):
+        setattr(self.session, "closed", True)
+        await self.session.close()
 
 
 class FakeTwitch:
@@ -97,7 +97,9 @@ def test_container_singletons(
 
 
 @pytest.mark.asyncio
-async def test_container_aclose(monkeypatch: pytest.MonkeyPatch, settings: Settings) -> None:
+async def test_container_aclose(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
     monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
     monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
     monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
