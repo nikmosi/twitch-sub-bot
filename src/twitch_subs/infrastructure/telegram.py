@@ -73,8 +73,8 @@ class TelegramNotifier(NotifierProtocol):
                 disable_web_page_preview=disable_web_page_preview,
                 disable_notification=disable_notification,
             )
-        except Exception:
-            logger.exception("Telegram send failed")
+        except Exception as e:
+            logger.opt(exception=e).exception("Telegram send failed")
 
 
 class IDFilter(Filter):
