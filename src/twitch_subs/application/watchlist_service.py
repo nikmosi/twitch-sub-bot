@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..domain.ports import WatchlistRepository
+from .ports import WatchlistRepository
 
 
 class WatchlistService:

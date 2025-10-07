@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from twitch_subs.application.logins import LoginsProvider
-
-from ..domain.ports import WatchlistRepository
+from twitch_subs.application.ports import WatchlistRepository
 
 
 class WatchListLoginProvider(LoginsProvider):

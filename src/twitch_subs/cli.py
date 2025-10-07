@@ -11,8 +11,8 @@ from typing import Sequence
 import typer
 from loguru import logger
 
+from twitch_subs.application.ports import WatchlistRepository
 from twitch_subs.application.watcher import Watcher
-from twitch_subs.domain.ports import WatchlistRepository
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings

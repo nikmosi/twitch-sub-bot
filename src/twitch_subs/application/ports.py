@@ -3,7 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Protocol, Sequence
 
-from .models import BroadcasterType, LoginReportInfo, LoginStatus, SubState, UserRecord
+from twitch_subs.domain.models import (
+    BroadcasterType,
+    LoginReportInfo,
+    LoginStatus,
+    SubState,
+    UserRecord,
+)
 
 
 class TwitchClientProtocol(Protocol):

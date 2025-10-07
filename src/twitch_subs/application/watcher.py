@@ -8,9 +8,14 @@ from datetime import datetime, timezone
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.domain.models import (
+    BroadcasterType,
+    LoginReportInfo,
+    LoginStatus,
+    SubState,
+)
 
-from ..domain.models import BroadcasterType, LoginReportInfo, LoginStatus, SubState
-from ..domain.ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
+from .ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
 
 
 class Watcher:

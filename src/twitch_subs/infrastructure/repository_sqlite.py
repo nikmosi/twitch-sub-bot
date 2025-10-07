@@ -21,8 +21,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from ..domain.models import SubState
-from ..domain.ports import SubscriptionStateRepo, WatchlistRepository
+from twitch_subs.application.ports import SubscriptionStateRepo, WatchlistRepository
+from twitch_subs.domain.models import SubState
 
 metadata = MetaData()
 
