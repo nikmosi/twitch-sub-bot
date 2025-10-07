@@ -3,23 +3,24 @@ import contextlib
 from collections import deque
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Iterable
+from typing import Iterable, Sequence
 
 import pytest
 
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.application.ports import (
+    NotifierProtocol,
+    SubscriptionStateRepo,
+    TwitchClientProtocol,
+)
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.models import (
     BroadcasterType,
+    LoginReportInfo,
     LoginStatus,
     State,
     SubState,
     UserRecord,
-)
-from twitch_subs.domain.ports import (
-    NotifierProtocol,
-    SubscriptionStateRepo,
-    TwitchClientProtocol,
 )
 
 
@@ -51,7 +52,7 @@ class DummyNotifier(NotifierProtocol):
         self.start_called = False
         self.stop_called = False
         self.changes: list[tuple[LoginStatus, BroadcasterType]] = []
-        self.reports: list[tuple[list[str], dict[str, BroadcasterType], int, int]] = []
+        self.reports: list[tuple[list[LoginReportInfo], int, int]] = []
         self.messages: list[str] = []
 
     async def notify_about_change(
@@ -67,12 +68,11 @@ class DummyNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        logins: Iterable[str],
-        state: dict[str, BroadcasterType],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None:
-        self.reports.append((list(logins), state, checks, errors))
+        self.reports.append((list(states), checks, errors))
 
     async def send_message(
         self,
@@ -211,10 +211,13 @@ async def test_report_aggregates_state() -> None:
     watcher = Watcher(DummyTwitch({}), notifier, repo)
 
     await watcher._report(["foo", "bar"], checks=3, errors=1)
+    # list[tuple[list[LoginReportInfo], int, int]]
     assert notifier.reports == [
         (
-            ["foo", "bar"],
-            {"foo": BroadcasterType.AFFILIATE, "bar": BroadcasterType.NONE},
+            [
+                LoginReportInfo("foo", BroadcasterType.AFFILIATE),
+                LoginReportInfo("bar", BroadcasterType.NONE),
+            ],
             3,
             1,
         )

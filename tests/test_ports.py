@@ -1,15 +1,14 @@
-import pytest
-
 from collections.abc import Iterable
 
+import pytest
 
-from twitch_subs.domain.models import SubState, UserRecord
-from twitch_subs.domain.ports import (
+from twitch_subs.application.ports import (
     NotifierProtocol,
     SubscriptionStateRepo,
     TwitchClientProtocol,
     WatchlistRepository,
 )
+from twitch_subs.domain.models import SubState, UserRecord
 
 
 def test_twitch_client_protocol_subclass() -> None:
