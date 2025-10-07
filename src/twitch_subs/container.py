@@ -5,6 +5,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from sqlalchemy import create_engine, text
 
@@ -33,6 +34,7 @@ class Container:
     _twitch: TwitchClient | None = None
     _notifier: TelegramNotifier | None = None
     _telegram_bot: Bot | None = None
+    _tg_session: AiohttpSession | None = None
 
     @property
     def watchlist_service(self) -> WatchlistService:
@@ -94,9 +96,11 @@ class Container:
 
     @property
     def telegram_bot(self) -> Bot:
+        self._tg_session = AiohttpSession()
         if self._telegram_bot is None:
             self._telegram_bot = Bot(
                 token=self.settings.telegram_bot_token,
+                session=self._tg_session,
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
         return self._telegram_bot
@@ -105,15 +109,15 @@ class Container:
         """Release resources created by the container."""
 
         try:
-            if self._notifier is not None:
-                await self._notifier.aclose()
-            elif self._telegram_bot is not None:
-                session = getattr(self._telegram_bot, "session", None)
-                if session is not None and not getattr(session, "closed", False):
-                    await session.close()
+            if self._tg_session is not None:
+                await self._tg_session.close()
+            if self._telegram_bot:
+                await self._telegram_bot.close()
         finally:
-            self._notifier = None
+            self._tg_session = None
             self._telegram_bot = None
+
+        self._notifier = None
 
         if self._twitch is not None:
             self._twitch.close()

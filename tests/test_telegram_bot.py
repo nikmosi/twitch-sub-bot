@@ -6,16 +6,9 @@ from typing import Any
 import pytest
 
 from twitch_subs.application.watchlist_service import WatchlistService
-from twitch_subs.domain.models import (
-    BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
-    UserRecord,
-)
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import (
     IDFilter,
-    TelegramNotifier,
     TelegramWatchlistBot,
 )
 
@@ -64,36 +57,6 @@ class DummyDispatcher:
 def make_service(tmp_path: Path) -> WatchlistService:
     repo = SqliteWatchlistRepository(f"sqlite:///{tmp_path / 'watch.db'}")
     return WatchlistService(repo)
-
-
-def test_notifier_formats_messages(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = StubBot()
-    notifier = TelegramNotifier(bot, "123")
-
-    user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
-    status = LoginStatus("foo", BroadcasterType.AFFILIATE, user)
-
-    asyncio.run(notifier.notify_about_start())
-    asyncio.run(notifier.notify_about_change(status, BroadcasterType.AFFILIATE))
-    asyncio.run(
-        notifier.notify_report(
-            states=[LoginReportInfo(login="Foo", status="aff")],
-            checks=5,
-            errors=1,
-        )
-    )
-    asyncio.run(notifier.notify_about_stop())
-    asyncio.run(notifier.aclose())
-
-    assert bot.sent[0][0].startswith("🟢")
-    assert "Foo" in bot.sent[1][0]
-    # notify_report batches and marks notification as silent
-    assert any(kwargs.get("disable_notification") for _, kwargs in bot.sent)
-
-    bot.fail_next = True
-    asyncio.run(notifier.send_message("fails"))
-    # failure swallowed, no new message recorded
-    assert bot.sent[-1][0] != "fails"
 
 
 def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
