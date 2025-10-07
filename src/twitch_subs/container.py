@@ -100,3 +100,28 @@ class Container:
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
         return self._telegram_bot
+
+    async def aclose(self) -> None:
+        """Release resources created by the container."""
+
+        try:
+            if self._notifier is not None:
+                await self._notifier.aclose()
+            elif self._telegram_bot is not None:
+                session = getattr(self._telegram_bot, "session", None)
+                if session is not None and not getattr(session, "closed", False):
+                    await session.close()
+        finally:
+            self._notifier = None
+            self._telegram_bot = None
+
+        if self._twitch is not None:
+            self._twitch.close()
+            self._twitch = None
+
+        if self._engine is not None:
+            self._engine.dispose()
+            self._engine = None
+
+        self._watchlist_repo = None
+        self._sub_state_repo = None
