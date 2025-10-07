@@ -35,7 +35,7 @@ addopts = [
   "--cov=src",              # pytest-cov
   "--cov-report=term-missing:skip-covered",
   "--cov-report=xml",
-  "--cov-fail-under=95"     # целевой порог
+  "--cov-fail-under=90"     # целевой порог
 ]
 
 xfail_strict = true

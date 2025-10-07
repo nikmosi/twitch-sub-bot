@@ -11,8 +11,8 @@ from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
-from twitch_subs.config import Settings
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.config import Settings
 from twitch_subs.domain.models import BroadcasterType, SubState, TwitchAppCreds
 from twitch_subs.infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
@@ -28,10 +28,14 @@ class DummySession:
 
 
 class DummyAiogramBot:
-    def __init__(self, token: str, default: Any | None = None) -> None:  # noqa: D401
+    def __init__(self, token: str, session: Any, default: Any | None = None) -> None:  # noqa: D401
         self.token = token
+        self.session = session
         self.default = default
         self.session = DummySession()
+
+    async def close(self):
+        await self.session.close()
 
 
 class DummyNotifier:
@@ -71,6 +75,8 @@ def configure_env(monkeypatch: pytest.MonkeyPatch, db: Path) -> None:
     monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
+
+
 def test_validate_usernames() -> None:
     assert cli.validate_usernames(["valid_name", "User123"]) == [
         "valid_name",
