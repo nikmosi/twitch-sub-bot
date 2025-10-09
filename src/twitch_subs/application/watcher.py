@@ -88,7 +88,7 @@ class Watcher:
                 broadcaster_type = BroadcasterType(s.tier)
             else:
                 broadcaster_type = BroadcasterType.NONE
-            state.append(LoginReportInfo(login, broadcaster_type))
+            state.append(LoginReportInfo(login, broadcaster_type.value))
         await self.notifier.notify_report(state, checks, errors)
 
     async def watch(
