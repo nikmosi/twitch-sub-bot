@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Protocol, Sequence
+from typing import Awaitable, Callable, Protocol, Sequence
 
+from twitch_subs.domain.events import DomainEvent
 from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
@@ -10,6 +11,13 @@ from twitch_subs.domain.models import (
     SubState,
     UserRecord,
 )
+
+Handler = Callable[[DomainEvent], Awaitable[None]]
+
+
+class EventBus(Protocol):
+    async def publish(self, *events: DomainEvent) -> None: ...
+    def subscribe(self, event_type: type[DomainEvent], handler: Handler) -> None: ...
 
 
 class TwitchClientProtocol(Protocol):
