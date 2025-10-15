@@ -256,9 +256,3 @@ def main() -> None:  # pragma: no cover - CLI entry point
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     main()
-def _get_notifier(container: Container) -> TelegramNotifier | None:
-    settings = container.settings
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
-        return None
-    return container.notifier
-

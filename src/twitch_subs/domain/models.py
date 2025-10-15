@@ -38,17 +38,18 @@ class LoginStatus:
 
 
 @dataclass(frozen=True, slots=True)
-class LoginReportInfo:
-    login: str
-    status: str
-
-
-@dataclass(frozen=True, slots=True)
 class SubState:
     login: str
-    is_subscribed: bool
-    tier: str | None = None
+    status: BroadcasterType
     since: datetime | None = None
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @property
+    def is_subscribed(self) -> bool:
+        return self.status.is_subscribable()
+
+    @property
+    def tier(self) -> str | None:
+        return self.status.value if self.is_subscribed else None
 
 
