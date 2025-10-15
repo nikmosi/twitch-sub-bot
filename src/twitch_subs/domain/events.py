@@ -38,3 +38,13 @@ class LoopChecked(DomainEvent):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class OnceCheck(DomainEvent):
     login: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UserAdded(DomainEvent):
+    login: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class UserRemoved(DomainEvent):
+    login: str
