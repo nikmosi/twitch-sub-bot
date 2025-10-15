@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -11,9 +13,12 @@ from loguru import logger
 from sqlalchemy import create_engine, text
 
 from twitch_subs.application.ports import EventBus
+from twitch_subs.application.reporting import DailyReportCollector, DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import (
+    DayChanged,
     LoopChecked,
+    LoopCheckFailed,
     OnceChecked,
     UserAdded,
     UserBecomeSubscribtable,
@@ -46,6 +51,9 @@ class Container:
     _telegram_bot: Bot | None = None
     _tg_session: AiohttpSession | None = None
     _event_bus: EventBus | None = None
+    _report_collector: DailyReportCollector | None = None
+    _day_scheduler: DayChangeScheduler | None = None
+    _day_scheduler_pending: bool = False
 
     @property
     def watchlist_service(self) -> WatchlistService:
@@ -96,9 +104,11 @@ class Container:
         return self._notifier
 
     def build_watcher(self) -> Watcher:
-        return Watcher(
+        watcher = Watcher(
             self.twitch_client, self.notifier, self.sub_state_repo, self.event_bus
         )
+        self.ensure_day_scheduler()
+        return watcher
 
     def build_bot(self) -> TelegramWatchlistBot:
         return TelegramWatchlistBot(
@@ -112,11 +122,13 @@ class Container:
         if self._tg_session is None:
             self._tg_session = AiohttpSession()
         if self._telegram_bot is None:
-            self._telegram_bot = Bot(
-                token=self.settings.telegram_bot_token,
-                session=self._tg_session,
-                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-            )
+            bot_kwargs: dict[str, Any] = {
+                "token": self.settings.telegram_bot_token,
+                "default": DefaultBotProperties(parse_mode=ParseMode.HTML),
+            }
+            if "session" in inspect.signature(Bot).parameters:
+                bot_kwargs["session"] = self._tg_session
+            self._telegram_bot = Bot(**bot_kwargs)
         return self._telegram_bot
 
     @property
@@ -161,13 +173,34 @@ class Container:
             eb.subscribe(OnceChecked, log_once_check)
             eb.subscribe(LoopChecked, log_loop_check)
 
+            collector = DailyReportCollector(notifier, self.sub_state_repo)
+            self._report_collector = collector
+            eb.subscribe(LoopChecked, collector.handle_loop_checked)
+            eb.subscribe(LoopCheckFailed, collector.handle_loop_failed)
+            eb.subscribe(DayChanged, collector.handle_day_changed)
+
         return self._event_bus
+
+    def ensure_day_scheduler(self) -> None:
+        if self._day_scheduler is None:
+            self._day_scheduler = DayChangeScheduler(
+                self.event_bus, cron=self.settings.report_cron
+            )
+            self._day_scheduler_pending = True
+
+        if self._day_scheduler_pending:
+            try:
+                asyncio.get_running_loop()
+            except RuntimeError:
+                return
+            self._day_scheduler.start()
+            self._day_scheduler_pending = False
 
     async def aclose(self) -> None:
         """Release resources created by the container."""
 
         try:
-            if self._telegram_bot is not None:
+            if self._telegram_bot is not None and hasattr(self._telegram_bot, "close"):
                 await self._telegram_bot.close()
             if self._tg_session is not None:
                 await self._tg_session.close()
@@ -187,3 +220,8 @@ class Container:
 
         self._watchlist_repo = None
         self._sub_state_repo = None
+        if self._day_scheduler is not None:
+            self._day_scheduler.stop()
+            self._day_scheduler = None
+        self._day_scheduler_pending = False
+        self._report_collector = None

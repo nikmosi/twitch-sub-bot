@@ -36,6 +36,12 @@ class LoopChecked(DomainEvent):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class LoopCheckFailed(DomainEvent):
+    logins: Sequence[str]
+    error: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class OnceChecked(DomainEvent):
     login: str
     current_state: BroadcasterType

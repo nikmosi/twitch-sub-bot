@@ -103,11 +103,20 @@ async def test_run_watch_invokes_watcher() -> None:
         def get(self) -> list[str]:
             return ["foo"]
 
+    class DummyContainer:
+        def __init__(self) -> None:
+            self.called = 0
+
+        def ensure_day_scheduler(self) -> None:
+            self.called += 1
+
+    container = DummyContainer()
     watcher = DummyWatcher()
     repo = SimpleNamespace(list=lambda: ["foo"])
     stop = asyncio.Event()
-    await cli.run_watch(watcher, repo, interval=1, stop=stop)
+    await cli.run_watch(container, watcher, repo, interval=1, stop=stop)
     assert watcher.calls == [(["foo"], 1)]
+    assert container.called == 1
 
 
 @pytest.mark.asyncio
@@ -289,6 +298,9 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         def build_bot(self) -> str:
             return "bot"
 
+        def ensure_day_scheduler(self) -> None:
+            pass
+
         async def aclose(self) -> None:
             self.closed = True
 
@@ -298,7 +310,11 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     calls = {"watch": False, "bot": False}
 
     async def fake_run_watch(
-        watcher: Any, repo: Any, interval: int, stop: asyncio.Event
+        container: Any,
+        watcher: Any,
+        repo: Any,
+        interval: int,
+        stop: asyncio.Event,
     ) -> None:
         calls["watch"] = True
         await asyncio.sleep(0)

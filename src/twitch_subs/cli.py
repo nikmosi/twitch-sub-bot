@@ -48,8 +48,13 @@ def root() -> None:
 
 
 async def run_watch(
-    watcher: Watcher, repo: WatchlistRepository, interval: int, stop: asyncio.Event
+    container: Container,
+    watcher: Watcher,
+    repo: WatchlistRepository,
+    interval: int,
+    stop: asyncio.Event,
 ):
+    container.ensure_day_scheduler()
     await watcher.watch(WatchListLoginProvider(repo), interval, stop)
 
 
@@ -145,7 +150,7 @@ def watch(
 
         bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
         watcher_task = loop.create_task(
-            run_watch(watcher, repo, interval, stop), name="run_watch"
+            run_watch(container, watcher, repo, interval, stop), name="run_watch"
         )
 
         tasks.append(bot_task)
@@ -251,3 +256,9 @@ def main() -> None:  # pragma: no cover - CLI entry point
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     main()
+def _get_notifier(container: Container) -> TelegramNotifier | None:
+    settings = container.settings
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        return None
+    return container.notifier
+

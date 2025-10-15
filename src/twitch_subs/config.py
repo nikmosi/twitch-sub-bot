@@ -13,6 +13,7 @@ class Settings(BaseSettings):
         default="sqlite:///./var/data.db", validation_alias="DB_URL"
     )
     database_echo: bool = Field(default=False, validation_alias="DB_ECHO")
+    report_cron: str = Field(default="0 0 * * *", validation_alias="REPORT_CRON")
 
     @field_validator("database_echo", mode="before")
     @classmethod
