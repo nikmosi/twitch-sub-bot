@@ -3,22 +3,23 @@ import contextlib
 from collections import deque
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Iterable, Sequence
+from typing import Any, Iterable, Sequence
 
 import pytest
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.ports import (
+    EventBus,
     NotifierProtocol,
     SubscriptionStateRepo,
     TwitchClientProtocol,
 )
 from twitch_subs.application.watcher import Watcher
+from twitch_subs.domain.events import LoopChecked, OnceChecked, UserBecomeSubscribtable
 from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
     LoginStatus,
-    State,
     SubState,
     UserRecord,
 )
@@ -103,11 +104,19 @@ class StaticLogins(LoginsProvider):
         return list(self.value)
 
 
+class DummyEventBus(EventBus):
+    def __init__(self) -> None:
+        self.events: list[Any] = []
+
+    async def publish(self, event: Any) -> None:
+        self.events.append(event)
+
+
 @pytest.mark.asyncio
 async def test_check_login_found_and_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
     twitch = DummyTwitch({"foo": user, "bar": None})
-    watcher = Watcher(twitch, DummyNotifier(), InMemoryStateRepo())
+    watcher = Watcher(twitch, DummyNotifier(), InMemoryStateRepo(), DummyEventBus())
 
     status = await watcher.check_login("foo")
     assert status.user == user
@@ -137,12 +146,18 @@ async def test_run_once_transitions_and_notifies(
     repo = InMemoryStateRepo()
     notifier = DummyNotifier()
     user = UserRecord("1", "foo", "Foo", BroadcasterType.PARTNER)
-    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo)
+    event_bus = DummyEventBus()
+    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo, event_bus)
 
     stop = asyncio.Event()
     changed = await watcher.run_once(["foo"], stop)
     assert changed is True
-    assert notifier.changes and notifier.changes[0][0].login == "foo"
+    change_event = next(
+        (evt for evt in event_bus.events if isinstance(evt, UserBecomeSubscribtable)),
+        None,
+    )
+    assert change_event is not None
+    assert change_event.login == "foo"
     stored = repo.get_sub_state("foo")
     assert stored is not None
     assert stored.is_subscribed is True
@@ -165,13 +180,18 @@ async def test_run_once_preserves_since(monkeypatch: pytest.MonkeyPatch) -> None
     )
     notifier = DummyNotifier()
     user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
-    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo)
+    event_bus = DummyEventBus()
+    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo, event_bus)
 
     stop = asyncio.Event()
     changed = await watcher.run_once(["foo"], stop)
     assert changed is False
     # ensure no new notification and since preserved
-    assert notifier.changes == []
+    assert not any(
+        isinstance(evt, UserBecomeSubscribtable) for evt in event_bus.events
+    )
+    assert any(isinstance(evt, OnceChecked) for evt in event_bus.events)
+    assert any(isinstance(evt, LoopChecked) for evt in event_bus.events)
     assert repo.get_sub_state("foo").since == earlier
 
 
@@ -192,7 +212,7 @@ async def test_run_once_stop_event_short_circuits(
             return await delayed_user(login)
 
     repo = InMemoryStateRepo()
-    watcher = Watcher(StopTwitch(), DummyNotifier(), repo)
+    watcher = Watcher(StopTwitch(), DummyNotifier(), repo, DummyEventBus())
 
     changed = await watcher.run_once(["foo", "bar"], stop)
     assert changed is False
@@ -208,7 +228,7 @@ async def test_report_aggregates_state() -> None:
         ]
     )
     notifier = DummyNotifier()
-    watcher = Watcher(DummyTwitch({}), notifier, repo)
+    watcher = Watcher(DummyTwitch({}), notifier, repo, DummyEventBus())
 
     await watcher._report(["foo", "bar"], checks=3, errors=1)
     # list[tuple[list[LoginReportInfo], int, int]]
@@ -228,7 +248,7 @@ async def test_report_aggregates_state() -> None:
 async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = InMemoryStateRepo()
     notifier = DummyNotifier()
-    watcher = Watcher(DummyTwitch({}), notifier, repo)
+    watcher = Watcher(DummyTwitch({}), notifier, repo, DummyEventBus())
     logins = StaticLogins(["foo"])
     stop = asyncio.Event()
 
@@ -273,10 +293,3 @@ async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) ->
     assert call_counter["calls"] >= 3
     # report called once with checks reset after error handling
     assert notifier.reports[0][2:] == (2, 1)
-
-
-def test_state_copy_roundtrip() -> None:
-    state = State({"foo": BroadcasterType.AFFILIATE})
-    cloned = state.copy()
-    assert cloned is not state
-    assert dict(cloned) == {"foo": BroadcasterType.AFFILIATE}
