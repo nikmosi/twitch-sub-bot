@@ -7,13 +7,23 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from loguru import logger
 from sqlalchemy import create_engine, text
 
+from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
+from twitch_subs.domain.events import (
+    LoopChecked,
+    OnceChecked,
+    UserAdded,
+    UserBecomeSubscribtable,
+    UserRemoved,
+)
+from twitch_subs.infrastructure.event_bus.in_memory import InMemoryEventBus
 
 from .application.watcher import Watcher
 from .config import Settings
-from .domain.models import TwitchAppCreds
+from .domain.models import LoginStatus, TwitchAppCreds
 from .infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
     SqliteWatchlistRepository,
@@ -35,6 +45,7 @@ class Container:
     _notifier: TelegramNotifier | None = None
     _telegram_bot: Bot | None = None
     _tg_session: AiohttpSession | None = None
+    _event_bus: EventBus | None = None
 
     @property
     def watchlist_service(self) -> WatchlistService:
@@ -85,7 +96,9 @@ class Container:
         return self._notifier
 
     def build_watcher(self) -> Watcher:
-        return Watcher(self.twitch_client, self.notifier, self.sub_state_repo)
+        return Watcher(
+            self.twitch_client, self.notifier, self.sub_state_repo, self.event_bus
+        )
 
     def build_bot(self) -> TelegramWatchlistBot:
         return TelegramWatchlistBot(
@@ -105,6 +118,50 @@ class Container:
                 default=DefaultBotProperties(parse_mode=ParseMode.HTML),
             )
         return self._telegram_bot
+
+    @property
+    def event_bus(self) -> EventBus:
+        if self._event_bus is None:
+            self._event_bus = InMemoryEventBus()
+
+            notifier = self.notifier
+
+            async def notify_about_add(event: UserAdded) -> None:
+                await notifier.send_message(
+                    f"➕ <code>{event.login}</code> добавлен в список наблюдения"
+                )
+
+            async def notify_about_remove(event: UserRemoved) -> None:
+                await notifier.send_message(
+                    f"➕ <code>{event.login}</code> добавлен в список наблюдения"
+                )
+
+            async def notify_about_subs_change(event: UserBecomeSubscribtable) -> None:
+                await notifier.notify_about_change(
+                    LoginStatus(event.login, event.current_state, None),
+                    event.current_state,
+                )
+
+            async def log_once_check(event: OnceChecked) -> None:
+                logger.debug(
+                    f"checked {event.login} with status {event.current_state.value}."
+                )
+
+            async def log_loop_check(event: LoopChecked) -> None:
+                logger.debug(f"checked {event.logins=}.")
+
+            async def log_subs_change(event: UserBecomeSubscribtable) -> None:
+                logger.info(f"{event.login} become {event.current_state.value}.")
+
+            eb = self._event_bus
+            eb.subscribe(UserAdded, notify_about_add)
+            eb.subscribe(UserRemoved, notify_about_remove)
+            eb.subscribe(UserBecomeSubscribtable, notify_about_subs_change)
+            eb.subscribe(UserBecomeSubscribtable, log_subs_change)
+            eb.subscribe(OnceChecked, log_once_check)
+            eb.subscribe(LoopChecked, log_loop_check)
+
+        return self._event_bus
 
     async def aclose(self) -> None:
         """Release resources created by the container."""

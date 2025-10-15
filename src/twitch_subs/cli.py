@@ -13,6 +13,7 @@ from loguru import logger
 
 from twitch_subs.application.ports import WatchlistRepository
 from twitch_subs.application.watcher import Watcher
+from twitch_subs.domain.events import UserAdded
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
@@ -165,7 +166,7 @@ def add(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
-    notifier = container.notifier
+    event_bus = container.event_bus
     service = container.watchlist_service
     try:
         for batch in batched(usernames, n=10):
@@ -174,17 +175,8 @@ def add(
                     typer.echo(f"{username} already present")
                     continue
                 typer.echo(f"Added {username}")
-            if notifier and notify:
-                asyncio.run(
-                    notifier.send_message(
-                        "\n".join(
-                            [
-                                f"➕ <code>{i}</code> добавлен в список наблюдения"
-                                for i in batch
-                            ]
-                        )
-                    )
-                )
+                if notify:
+                    asyncio.run(event_bus.publish(UserAdded(login=username)))
     finally:
         asyncio.run(container.aclose())
 
@@ -217,7 +209,7 @@ def remove(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
-    notifier = container.notifier
+    event_bus = container.event_bus
     service = container.watchlist_service
 
     try:
@@ -225,12 +217,8 @@ def remove(
             removed = service.remove(username)
             if removed:
                 typer.echo(f"Removed {username}")
-                if notifier and notify:
-                    asyncio.run(
-                        notifier.send_message(
-                            f"➖ <code>{username}</code> удален из списка наблюдения",
-                        )
-                    )
+                if notify:
+                    asyncio.run(event_bus.publish(UserAdded(login=username)))
             else:
                 if quiet:
                     return

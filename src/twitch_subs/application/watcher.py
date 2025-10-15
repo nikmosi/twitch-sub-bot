@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.domain.events import LoopChecked, OnceChecked, UserBecomeSubscribtable
 from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
@@ -15,7 +16,12 @@ from twitch_subs.domain.models import (
     SubState,
 )
 
-from .ports import NotifierProtocol, SubscriptionStateRepo, TwitchClientProtocol
+from .ports import (
+    EventBus,
+    NotifierProtocol,
+    SubscriptionStateRepo,
+    TwitchClientProtocol,
+)
 
 
 class Watcher:
@@ -26,39 +32,38 @@ class Watcher:
         twitch: TwitchClientProtocol,
         notifier: NotifierProtocol,
         state_repo: SubscriptionStateRepo,
+        event_bus: EventBus,
     ) -> None:
         self.twitch = twitch
         self.notifier = notifier
         self.state_repo = state_repo
+        self.event_bus = event_bus
 
     async def check_login(self, login: str) -> LoginStatus:
-        logger.trace("Checking login {}", login)
         user = await self.twitch.get_user_by_login(login)
         btype = BroadcasterType.NONE if user is None else user.broadcaster_type
-        logger.trace("Login {} status {}", login, btype or "not-found")
         return LoginStatus(login, btype, user)
 
-    async def run_once(self, logins: Iterable[str], stop_event: asyncio.Event) -> bool:
+    async def run_once(self, logins: Sequence[str], stop_event: asyncio.Event) -> bool:
         changed = False
         updates: list[SubState] = []
         for login in logins:
             if stop_event.is_set():
                 return False
             status = await self.check_login(login)
-            curr = status.broadcaster_type or BroadcasterType.NONE
+            curr = status.broadcaster_type
             prev = self.state_repo.get_sub_state(status.login)
             prev_sub = prev.is_subscribed if prev else False
             curr_sub = curr.is_subscribable()
             if prev_sub != curr_sub:
                 changed = True
-                logger.info(
-                    "Status change for {}: {} -> {}",
-                    status.login,
-                    (prev.tier if prev and prev.tier else BroadcasterType.NONE.value),
-                    curr.value,
-                )
                 if curr_sub:
-                    await self.notifier.notify_about_change(status, curr)
+                    await self.event_bus.publish(
+                        UserBecomeSubscribtable(
+                            login=login,
+                            current_state=curr,
+                        )
+                    )
             since = (
                 prev.since
                 if prev and prev_sub and curr_sub
@@ -72,7 +77,9 @@ class Watcher:
                     since=since,
                 )
             )
+            await self.event_bus.publish(OnceChecked(login=login, current_state=curr))
         self.state_repo.set_many(updates)
+        await self.event_bus.publish(LoopChecked(logins=logins))
         return changed
 
     async def _report(

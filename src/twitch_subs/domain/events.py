@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Sequence
 
+
 from twitch_subs.domain.models import BroadcasterType
 
 
@@ -24,9 +25,8 @@ class DomainEvent:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SubStateChanged(DomainEvent):
+class UserBecomeSubscribtable(DomainEvent):
     login: str
-    previous_state: BroadcasterType
     current_state: BroadcasterType
 
 
@@ -36,8 +36,9 @@ class LoopChecked(DomainEvent):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class OnceCheck(DomainEvent):
+class OnceChecked(DomainEvent):
     login: str
+    current_state: BroadcasterType
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -48,3 +49,8 @@ class UserAdded(DomainEvent):
 @dataclass(frozen=True, slots=True, kw_only=True)
 class UserRemoved(DomainEvent):
     login: str
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DayChanged(DomainEvent):
+    pass

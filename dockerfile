@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM ghcr.io/astral-sh/uv:alpine
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm
 
 ENV TERM xterm-256color
 
