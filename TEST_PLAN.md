@@ -10,7 +10,6 @@ and additional scenarios required for deterministic, high-signal tests.
 
 ### `domain/models.py`
 - Validate `BroadcasterType.is_subscribable` for all enum values.
-- Ensure `State` behaves like a mutable mapping (getitem, setitem, delitem, iteration, copy).
 - Exercise `SubState` default timestamp generation deterministically.
 - Property-based checks for `UserRecord`/`LoginStatus` immutability and equality semantics.
 

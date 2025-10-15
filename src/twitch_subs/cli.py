@@ -18,7 +18,7 @@ from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
 from .container import Container
-from .infrastructure.telegram import TelegramWatchlistBot
+from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -61,6 +61,16 @@ async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
     with contextlib.suppress(asyncio.CancelledError):
         await bot.stop()
         await task
+
+
+def _get_notifier(container: Container) -> TelegramNotifier | None:
+    """Return configured notifier when Telegram credentials are provided."""
+
+    token = container.settings.telegram_bot_token
+    chat_id = container.settings.telegram_chat_id
+    if not token or not chat_id:
+        return None
+    return container.notifier
 
 
 @state_app.command("get", help="Get stored state for LOGIN")
@@ -166,7 +176,10 @@ def add(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
-    event_bus = container.event_bus
+    event_bus = None
+    should_notify = bool(notify and _get_notifier(container))
+    if should_notify:
+        event_bus = container.event_bus
     service = container.watchlist_service
     try:
         for batch in batched(usernames, n=10):
@@ -175,7 +188,7 @@ def add(
                     typer.echo(f"{username} already present")
                     continue
                 typer.echo(f"Added {username}")
-                if notify:
+                if should_notify and event_bus is not None:
                     asyncio.run(event_bus.publish(UserAdded(login=username)))
     finally:
         asyncio.run(container.aclose())
@@ -209,7 +222,10 @@ def remove(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
-    event_bus = container.event_bus
+    event_bus = None
+    should_notify = bool(notify and _get_notifier(container))
+    if should_notify:
+        event_bus = container.event_bus
     service = container.watchlist_service
 
     try:
@@ -217,7 +233,7 @@ def remove(
             removed = service.remove(username)
             if removed:
                 typer.echo(f"Removed {username}")
-                if notify:
+                if should_notify and event_bus is not None:
                     asyncio.run(event_bus.publish(UserAdded(login=username)))
             else:
                 if quiet:
