@@ -245,10 +245,15 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     now = datetime.now(timezone.utc)
     repo.upsert_sub_state(
         SubState(
-            "foo", True, BroadcasterType.AFFILIATE.value, since=now, updated_at=now
+            "foo",
+            BroadcasterType.AFFILIATE,
+            since=now,
+            updated_at=now,
         )
     )
-    repo.upsert_sub_state(SubState("bar", False, None, since=None, updated_at=now))
+    repo.upsert_sub_state(
+        SubState("bar", BroadcasterType.NONE, since=None, updated_at=now)
+    )
 
     runner = CliRunner()
     get_result = runner.invoke(cli.app, ["state", "get", "foo"])

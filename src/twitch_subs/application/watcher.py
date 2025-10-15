@@ -68,14 +68,7 @@ class Watcher:
                 if prev and prev_sub and curr_sub
                 else (datetime.now(timezone.utc) if curr_sub else None)
             )
-            updates.append(
-                SubState(
-                    login=status.login,
-                    is_subscribed=curr_sub,
-                    tier=curr.value if curr_sub else None,
-                    since=since,
-                )
-            )
+            updates.append(SubState(login=status.login, status=curr, since=since))
             await self.event_bus.publish(OnceChecked(login=login, current_state=curr))
         self.state_repo.set_many(updates)
         await self.event_bus.publish(LoopChecked(logins=logins))
