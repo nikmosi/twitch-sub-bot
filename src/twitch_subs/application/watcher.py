@@ -1,20 +1,19 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.domain.events import LoopChecked, OnceChecked, UserBecomeSubscribtable
-from twitch_subs.domain.models import (
-    BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
-    SubState,
+from twitch_subs.domain.events import (
+    LoopChecked,
+    LoopCheckFailed,
+    OnceChecked,
+    UserBecomeSubscribtable,
 )
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
 
 from .ports import (
     EventBus,
@@ -82,49 +81,25 @@ class Watcher:
         await self.event_bus.publish(LoopChecked(logins=logins))
         return changed
 
-    async def _report(
-        self,
-        logins: Sequence[str],
-        checks: int,
-        errors: int,
-    ) -> None:
-        state: list[LoginReportInfo] = []
-        for login in logins:
-            s = self.state_repo.get_sub_state(login)
-            if s and s.is_subscribed and s.tier:
-                broadcaster_type = BroadcasterType(s.tier)
-            else:
-                broadcaster_type = BroadcasterType.NONE
-            state.append(LoginReportInfo(login, broadcaster_type.value))
-        await self.notifier.notify_report(state, checks, errors)
-
     async def watch(
         self,
         logins: LoginsProvider,
         interval: int,
         stop_event: asyncio.Event,
-        report_interval: int = 86400,
     ) -> None:
         """Run the watcher until *stop_event* is set."""
 
         await self.notifier.notify_about_start()
-        next_report = time.time() + report_interval
-        checks = 0
-        errors = 0
         try:
             while not stop_event.is_set():
-                checks += 1
                 all_logins = logins.get()
                 try:
                     await self.run_once(all_logins, stop_event)
                 except Exception as e:
-                    errors += 1
                     logger.opt(exception=e).exception("Run once failed")
-                if time.time() >= next_report:
-                    await self._report(all_logins, checks, errors)
-                    checks = 0
-                    errors = 0
-                    next_report += report_interval
+                    await self.event_bus.publish(
+                        LoopCheckFailed(logins=tuple(all_logins), error=str(e))
+                    )
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)
                 except TimeoutError:
