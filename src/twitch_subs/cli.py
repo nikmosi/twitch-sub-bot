@@ -17,7 +17,7 @@ from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
 from .container import Container
-from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
+from .infrastructure.telegram import TelegramWatchlistBot
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -44,15 +44,6 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
 @app.callback()
 def root() -> None:
     """Root command for twitch-subs-checker."""
-
-
-def _get_notifier(container: Container) -> TelegramNotifier | None:
-    """Return Telegram notifier if credentials are configured."""
-    token = container.settings.telegram_bot_token
-    chat = container.settings.telegram_chat_id
-    if token and chat:
-        return container.notifier
-    return None
 
 
 async def run_watch(
@@ -174,9 +165,9 @@ def add(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
+    notifier = container.notifier
+    service = container.watchlist_service
     try:
-        notifier = _get_notifier(container)
-        service = container.watchlist_service
         for batch in batched(usernames, n=10):
             for username in batch:
                 if not service.add(username):
@@ -201,8 +192,9 @@ def add(
 @app.command("list", help="List Twitch usernames in watchlist")
 def list_cmd() -> None:
     container = Container(Settings())
+    repo = container.watchlist_repo
+
     try:
-        repo = container.watchlist_repo
         users = repo.list()
         if not users:
             typer.echo("Watchlist is empty. Use 'add' to add usernames.")
@@ -225,9 +217,10 @@ def remove(
     notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
 ) -> None:
     container = Container(Settings())
+    notifier = container.notifier
+    service = container.watchlist_service
+
     try:
-        notifier = _get_notifier(container)
-        service = container.watchlist_service
         for username in usernames:
             removed = service.remove(username)
             if removed:
