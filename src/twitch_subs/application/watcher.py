@@ -9,12 +9,7 @@ from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.events import LoopChecked, OnceChecked, UserBecomeSubscribtable
-from twitch_subs.domain.models import (
-    BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
-    SubState,
-)
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
 
 from .ports import (
     EventBus,
@@ -69,14 +64,16 @@ class Watcher:
                 if prev and prev_sub and curr_sub
                 else (datetime.now(timezone.utc) if curr_sub else None)
             )
-            updates.append(
-                SubState(
-                    login=status.login,
-                    is_subscribed=curr_sub,
-                    tier=curr.value if curr_sub else None,
-                    since=since,
+            if curr_sub:
+                updates.append(
+                    SubState(
+                        login=status.login,
+                        broadcaster_type=curr,
+                        since=since,
+                    )
                 )
-            )
+            else:
+                updates.append(SubState.unsubscribed(status.login))
             await self.event_bus.publish(OnceChecked(login=login, current_state=curr))
         self.state_repo.set_many(updates)
         await self.event_bus.publish(LoopChecked(logins=logins))
@@ -88,14 +85,13 @@ class Watcher:
         checks: int,
         errors: int,
     ) -> None:
-        state: list[LoginReportInfo] = []
+        state: list[SubState] = []
         for login in logins:
             s = self.state_repo.get_sub_state(login)
-            if s and s.is_subscribed and s.tier:
-                broadcaster_type = BroadcasterType(s.tier)
+            if s is not None:
+                state.append(s)
             else:
-                broadcaster_type = BroadcasterType.NONE
-            state.append(LoginReportInfo(login, broadcaster_type.value))
+                state.append(SubState.unsubscribed(login))
         await self.notifier.notify_report(state, checks, errors)
 
     async def watch(

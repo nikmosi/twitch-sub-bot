@@ -8,7 +8,6 @@ from sqlalchemy import (
     Column,
     CursorResult,
     Index,
-    Integer,
     MetaData,
     String,
     Table,
@@ -22,7 +21,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from twitch_subs.application.ports import SubscriptionStateRepo, WatchlistRepository
-from twitch_subs.domain.models import SubState
+from twitch_subs.domain.models import BroadcasterType, SubState
 
 metadata = MetaData()
 
@@ -38,8 +37,7 @@ subscription_state = Table(
     "subscription_state",
     metadata,
     Column("login", String, primary_key=True),
-    Column("is_subscribed", Integer, nullable=False),
-    Column("tier", String),
+    Column("broadcaster_type", String, nullable=False),
     Column("since", String),
     Column("updated_at", String, nullable=False),
 )
@@ -99,8 +97,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
     def _row_to_state(self, row: Any) -> SubState:
         return SubState(
             login=row["login"],
-            is_subscribed=bool(row["is_subscribed"]),
-            tier=row["tier"],
+            broadcaster_type=BroadcasterType(row["broadcaster_type"]),
             since=datetime.fromisoformat(row["since"]) if row["since"] else None,
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
@@ -116,8 +113,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
     def upsert_sub_state(self, state: SubState) -> None:
         values = {
             "login": state.login,
-            "is_subscribed": 1 if state.is_subscribed else 0,
-            "tier": state.tier,
+            "broadcaster_type": state.broadcaster_type.value,
             "since": state.since.isoformat() if state.since else None,
             "updated_at": state.updated_at.isoformat(),
         }
@@ -125,8 +121,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
         stmt = insert_stmt.on_conflict_do_update(
             index_elements=[subscription_state.c.login],
             set_={
-                "is_subscribed": insert_stmt.excluded.is_subscribed,
-                "tier": insert_stmt.excluded.tier,
+                "broadcaster_type": insert_stmt.excluded.broadcaster_type,
                 "since": insert_stmt.excluded.since,
                 "updated_at": insert_stmt.excluded.updated_at,
             },
@@ -139,8 +134,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
         values = [
             {
                 "login": s.login,
-                "is_subscribed": 1 if s.is_subscribed else 0,
-                "tier": s.tier,
+                "broadcaster_type": s.broadcaster_type.value,
                 "since": s.since.isoformat() if s.since else None,
                 "updated_at": s.updated_at.isoformat(),
             }
@@ -152,8 +146,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
         stmt = insert_stmt.on_conflict_do_update(
             index_elements=[subscription_state.c.login],
             set_={
-                "is_subscribed": insert_stmt.excluded.is_subscribed,
-                "tier": insert_stmt.excluded.tier,
+                "broadcaster_type": insert_stmt.excluded.broadcaster_type,
                 "since": insert_stmt.excluded.since,
                 "updated_at": insert_stmt.excluded.updated_at,
             },

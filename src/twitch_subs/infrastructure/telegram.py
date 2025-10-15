@@ -12,7 +12,7 @@ from loguru import logger
 
 from twitch_subs.application.ports import NotifierProtocol
 from twitch_subs.application.watchlist_service import WatchlistService
-from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, LoginStatus
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
 
 
 class TelegramNotifier(NotifierProtocol):
@@ -44,7 +44,7 @@ class TelegramNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        states: Sequence[LoginReportInfo],
+        states: Sequence[SubState],
         checks: int,
         errors: int,
     ) -> None:
@@ -52,9 +52,10 @@ class TelegramNotifier(NotifierProtocol):
         text.append(f"Checks: <b>{checks}</b>")
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
-        for state in sorted(states, key=lambda a: a.status):
+        for state in sorted(states, key=lambda a: a.broadcaster_type.value):
             text.append(
-                f'• <b>{state.status:>8}</b> <a href="https://www.twitch.tv/{state.login}">{state.login}</a>'
+                f'• <b>{state.broadcaster_type.value:>8}</b> '
+                f'<a href="https://www.twitch.tv/{state.login}">{state.login}</a>'
             )
         for batch in batched(text, n=100):
             await self.send_message("\n".join(batch), disable_notification=True)

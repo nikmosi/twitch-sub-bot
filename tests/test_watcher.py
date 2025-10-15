@@ -3,22 +3,22 @@ import contextlib
 from collections import deque
 from dataclasses import replace
 from datetime import datetime, timezone
-from typing import Iterable, Sequence
+from typing import Awaitable, Callable, Iterable, Sequence
 
 import pytest
 
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.ports import (
+    EventBus,
     NotifierProtocol,
     SubscriptionStateRepo,
     TwitchClientProtocol,
 )
 from twitch_subs.application.watcher import Watcher
+from twitch_subs.domain.events import DomainEvent, UserBecomeSubscribtable
 from twitch_subs.domain.models import (
     BroadcasterType,
-    LoginReportInfo,
     LoginStatus,
-    State,
     SubState,
     UserRecord,
 )
@@ -52,7 +52,7 @@ class DummyNotifier(NotifierProtocol):
         self.start_called = False
         self.stop_called = False
         self.changes: list[tuple[LoginStatus, BroadcasterType]] = []
-        self.reports: list[tuple[list[LoginReportInfo], int, int]] = []
+        self.reports: list[tuple[list[SubState], int, int]] = []
         self.messages: list[str] = []
 
     async def notify_about_change(
@@ -68,7 +68,7 @@ class DummyNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        states: Sequence[LoginReportInfo],
+        states: Sequence[SubState],
         checks: int,
         errors: int,
     ) -> None:
@@ -103,11 +103,48 @@ class StaticLogins(LoginsProvider):
         return list(self.value)
 
 
+class DummyEventBus(EventBus):
+    def __init__(self) -> None:
+        self.published: list[DomainEvent] = []
+        self._handlers: dict[type[DomainEvent], list[Callable[[DomainEvent], Awaitable[None]]]] = {}
+
+    async def publish(self, *events: DomainEvent) -> None:
+        self.published.extend(events)
+        for event in events:
+            for handler in self._handlers.get(type(event), []):
+                await handler(event)
+
+    def subscribe(
+        self,
+        event_type: type[DomainEvent],
+        handler: Callable[[DomainEvent], Awaitable[None]],
+    ) -> None:
+        self._handlers.setdefault(event_type, []).append(handler)
+
+
+def build_watcher(
+    twitch: TwitchClientProtocol,
+    notifier: DummyNotifier,
+    repo: InMemoryStateRepo,
+) -> Watcher:
+    bus = DummyEventBus()
+
+    async def forward(event: DomainEvent) -> None:
+        if isinstance(event, UserBecomeSubscribtable):
+            await notifier.notify_about_change(
+                LoginStatus(event.login, event.current_state, None),
+                event.current_state,
+            )
+
+    bus.subscribe(UserBecomeSubscribtable, forward)
+    return Watcher(twitch, notifier, repo, bus)
+
+
 @pytest.mark.asyncio
 async def test_check_login_found_and_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
     twitch = DummyTwitch({"foo": user, "bar": None})
-    watcher = Watcher(twitch, DummyNotifier(), InMemoryStateRepo())
+    watcher = build_watcher(twitch, DummyNotifier(), InMemoryStateRepo())
 
     status = await watcher.check_login("foo")
     assert status.user == user
@@ -137,7 +174,7 @@ async def test_run_once_transitions_and_notifies(
     repo = InMemoryStateRepo()
     notifier = DummyNotifier()
     user = UserRecord("1", "foo", "Foo", BroadcasterType.PARTNER)
-    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo)
+    watcher = build_watcher(DummyTwitch({"foo": user}), notifier, repo)
 
     stop = asyncio.Event()
     changed = await watcher.run_once(["foo"], stop)
@@ -146,7 +183,7 @@ async def test_run_once_transitions_and_notifies(
     stored = repo.get_sub_state("foo")
     assert stored is not None
     assert stored.is_subscribed is True
-    assert stored.tier == BroadcasterType.PARTNER.value
+    assert stored.broadcaster_type is BroadcasterType.PARTNER
     assert stored.since == fixed
 
 
@@ -157,15 +194,14 @@ async def test_run_once_preserves_since(monkeypatch: pytest.MonkeyPatch) -> None
         [
             SubState(
                 login="foo",
-                is_subscribed=True,
-                tier=BroadcasterType.AFFILIATE.value,
+                broadcaster_type=BroadcasterType.AFFILIATE,
                 since=earlier,
             )
         ]
     )
     notifier = DummyNotifier()
     user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
-    watcher = Watcher(DummyTwitch({"foo": user}), notifier, repo)
+    watcher = build_watcher(DummyTwitch({"foo": user}), notifier, repo)
 
     stop = asyncio.Event()
     changed = await watcher.run_once(["foo"], stop)
@@ -192,7 +228,7 @@ async def test_run_once_stop_event_short_circuits(
             return await delayed_user(login)
 
     repo = InMemoryStateRepo()
-    watcher = Watcher(StopTwitch(), DummyNotifier(), repo)
+    watcher = build_watcher(StopTwitch(), DummyNotifier(), repo)
 
     changed = await watcher.run_once(["foo", "bar"], stop)
     assert changed is False
@@ -203,24 +239,23 @@ async def test_run_once_stop_event_short_circuits(
 async def test_report_aggregates_state() -> None:
     repo = InMemoryStateRepo(
         [
-            SubState("foo", True, BroadcasterType.AFFILIATE.value, since=None),
-            SubState("bar", False, None, since=None),
+            SubState("foo", BroadcasterType.AFFILIATE, since=None),
+            SubState("bar", BroadcasterType.NONE, since=None),
         ]
     )
     notifier = DummyNotifier()
-    watcher = Watcher(DummyTwitch({}), notifier, repo)
+    watcher = build_watcher(DummyTwitch({}), notifier, repo)
 
     await watcher._report(["foo", "bar"], checks=3, errors=1)
-    # list[tuple[list[LoginReportInfo], int, int]]
-    assert notifier.reports == [
-        (
-            [
-                LoginReportInfo("foo", BroadcasterType.AFFILIATE),
-                LoginReportInfo("bar", BroadcasterType.NONE),
-            ],
-            3,
-            1,
-        )
+    assert len(notifier.reports) == 1
+    report_states, checks, errors = notifier.reports[0]
+    assert checks == 3 and errors == 1
+    assert [
+        (state.login, state.broadcaster_type)
+        for state in sorted(report_states, key=lambda s: s.login)
+    ] == [
+        ("bar", BroadcasterType.NONE),
+        ("foo", BroadcasterType.AFFILIATE),
     ]
 
 
@@ -228,7 +263,7 @@ async def test_report_aggregates_state() -> None:
 async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) -> None:
     repo = InMemoryStateRepo()
     notifier = DummyNotifier()
-    watcher = Watcher(DummyTwitch({}), notifier, repo)
+    watcher = build_watcher(DummyTwitch({}), notifier, repo)
     logins = StaticLogins(["foo"])
     stop = asyncio.Event()
 
@@ -241,7 +276,10 @@ async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) ->
         return True
 
     async def fake_report(logins_arg: list[str], checks: int, errors: int) -> None:
-        notifier.reports.append((logins_arg, {}, checks, errors))
+        dummy_states = [
+            SubState(login, BroadcasterType.NONE) for login in logins_arg
+        ]
+        notifier.reports.append((dummy_states, checks, errors))
 
     monkeypatch.setattr(watcher, "run_once", fake_run_once)
     monkeypatch.setattr(watcher, "_report", fake_report)
@@ -272,11 +310,10 @@ async def test_watch_loop_counts_and_reports(monkeypatch: pytest.MonkeyPatch) ->
     # run_once called three times: two successful attempts + one after report before stop
     assert call_counter["calls"] >= 3
     # report called once with checks reset after error handling
-    assert notifier.reports[0][2:] == (2, 1)
+    _, checks_value, errors_value = notifier.reports[0]
+    assert (checks_value, errors_value) == (2, 1)
 
 
-def test_state_copy_roundtrip() -> None:
-    state = State({"foo": BroadcasterType.AFFILIATE})
-    cloned = state.copy()
-    assert cloned is not state
-    assert dict(cloned) == {"foo": BroadcasterType.AFFILIATE}
+def test_sub_state_is_subscribed_flag() -> None:
+    assert SubState("foo", BroadcasterType.PARTNER).is_subscribed is True
+    assert SubState("bar", BroadcasterType.NONE).is_subscribed is False

@@ -18,7 +18,7 @@ from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
 from .container import Container
-from .infrastructure.telegram import TelegramWatchlistBot
+from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -40,6 +40,15 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
             typer.echo("Invalid username format", err=True)
             raise typer.Exit(2)
     return names
+
+
+def _get_notifier(container: Container) -> TelegramNotifier | None:
+    """Return configured notifier or ``None`` if Telegram settings are absent."""
+
+    settings = container.settings
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        return None
+    return container.notifier
 
 
 @app.callback()

@@ -8,7 +8,7 @@ from twitch_subs.application.ports import (
     TwitchClientProtocol,
     WatchlistRepository,
 )
-from twitch_subs.domain.models import SubState, UserRecord
+from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 
 
 def test_twitch_client_protocol_subclass() -> None:
@@ -82,7 +82,7 @@ def test_subscription_state_repo_protocol_subclass() -> None:
                 self.data[st.login] = st
 
     repo = Impl()
-    st = SubState("foo", True)
+    st = SubState("foo", BroadcasterType.AFFILIATE)
     repo.upsert_sub_state(st)
     assert repo.get_sub_state("foo") == st
 

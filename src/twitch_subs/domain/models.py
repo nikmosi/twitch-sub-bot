@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Iterator, MutableMapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
@@ -39,42 +38,27 @@ class LoginStatus:
 
 
 @dataclass(frozen=True, slots=True)
-class LoginReportInfo:
-    login: str
-    status: str
-
-
-@dataclass(frozen=True, slots=True)
 class SubState:
+    """Last known subscription state for a Twitch login."""
+
     login: str
-    is_subscribed: bool
-    tier: str | None = None
+    broadcaster_type: BroadcasterType
     since: datetime | None = None
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
+    @property
+    def is_subscribed(self) -> bool:
+        return self.broadcaster_type.is_subscribable()
 
-@dataclass
-class State(MutableMapping[str, BroadcasterType]):
-    """Mapping of login names to their last known broadcaster type."""
+    @classmethod
+    def unsubscribed(
+        cls, login: str, *, updated_at: datetime | None = None
+    ) -> "SubState":
+        """Factory for unsubscribed state with predictable timestamps."""
 
-    logins: dict[str, BroadcasterType] = field(
-        default_factory=dict[str, BroadcasterType]
-    )
-
-    def __getitem__(self, key: str) -> BroadcasterType:
-        return self.logins[key]
-
-    def __setitem__(self, key: str, value: BroadcasterType) -> None:
-        self.logins[key] = value
-
-    def __delitem__(self, key: str) -> None:
-        del self.logins[key]
-
-    def __iter__(self) -> Iterator[str]:
-        return iter(self.logins)
-
-    def __len__(self) -> int:
-        return len(self.logins)
-
-    def copy(self) -> "State":
-        return State(self.logins.copy())
+        return cls(
+            login=login,
+            broadcaster_type=BroadcasterType.NONE,
+            since=None,
+            updated_at=updated_at or datetime.now(timezone.utc),
+        )

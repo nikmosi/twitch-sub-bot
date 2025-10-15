@@ -11,9 +11,18 @@ from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistReposito
 
 
 class DummyAiogramBot:
-    def __init__(self, token: str, default: Any | None = None) -> None:  # noqa: D401
+    def __init__(
+        self,
+        token: str,
+        session: Any | None = None,
+        default: Any | None = None,
+    ) -> None:  # noqa: D401
         self.token = token
+        self.session = session
         self.default = default
+
+    async def close(self) -> None:  # noqa: D401
+        pass
 
 
 def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):

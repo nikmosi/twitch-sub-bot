@@ -4,7 +4,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from twitch_subs.domain.models import BroadcasterType, State, SubState
+from twitch_subs.domain.models import BroadcasterType, SubState
 
 
 @pytest.mark.parametrize(
@@ -19,33 +19,25 @@ def test_is_subscribable(btype: BroadcasterType, expected: bool) -> None:
     assert btype.is_subscribable() is expected
 
 
-def test_state_mapping_operations() -> None:
-    st = State()
-    st["foo"] = BroadcasterType.NONE
-    assert list(iter(st)) == ["foo"]
-    assert len(st) == 1
-    del st["foo"]
-    assert len(st) == 0
-
-
 def test_substate_updated_at_defaults_to_utc() -> None:
     start = datetime.now(timezone.utc)
-    state = SubState("foo", False)
+    state = SubState("foo", BroadcasterType.NONE)
     end = datetime.now(timezone.utc)
     assert start <= state.updated_at <= end
     assert state.since is None
 
 
-@given(
-    st.dictionaries(
-        keys=st.text(min_size=1, max_size=5),
-        values=st.sampled_from(list(BroadcasterType)),
-    ),
-)
+def test_unsubscribed_factory() -> None:
+    fixed = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    state = SubState.unsubscribed("foo", updated_at=fixed)
+    assert state.broadcaster_type is BroadcasterType.NONE
+    assert state.is_subscribed is False
+    assert state.since is None
+    assert state.updated_at is fixed
+
+
+@given(st.sampled_from(list(BroadcasterType)))
 @settings(max_examples=50)
-def test_state_copy_property(data: dict[str, BroadcasterType]) -> None:
-    state = State(data.copy())
-    clone = state.copy()
-    assert dict(clone) == dict(state)
-    clone["new"] = BroadcasterType.NONE
-    assert "new" not in state
+def test_substate_subscription_flag(btype: BroadcasterType) -> None:
+    state = SubState("foo", btype)
+    assert state.is_subscribed is btype.is_subscribable()
