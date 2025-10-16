@@ -6,6 +6,7 @@ from typing import Awaitable, Callable, Protocol, Sequence, TypeVar
 from twitch_subs.domain.events import DomainEvent
 from twitch_subs.domain.models import (
     BroadcasterType,
+    LoginReportInfo,
     LoginStatus,
     SubState,
     UserRecord,
@@ -42,7 +43,7 @@ class NotifierProtocol(Protocol):
 
     async def notify_report(
         self,
-        states: Sequence[SubState],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None: ...  # pragma: no cover
