@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Any
@@ -7,7 +8,10 @@ from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
+from twitch_subs.config import Settings
+from twitch_subs.domain.events import UserAdded, UserRemoved
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
+from twitch_subs.infrastructure.telegram import TelegramNotifier
 
 
 class DummyAiogramBot:
@@ -79,3 +83,65 @@ def test_username_validation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert good.exit_code == 0
     bad = run(["add", "bad*name", "-n"], monkeypatch, db)
     assert bad.exit_code == 2
+
+
+def test_remove_emits_user_removed_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "wl.db"
+    events: list[object] = []
+
+    class StubEventBus:
+        async def publish(self, *published_events: object) -> None:  # noqa: D401
+            events.extend(published_events)
+
+    stub_bus = StubEventBus()
+
+    monkeypatch.setattr(cli, "_get_notifier", lambda container: object())
+    monkeypatch.setattr(
+        container_mod.Container,
+        "event_bus",
+        property(lambda self: stub_bus),
+    )
+
+    add_res = run(["add", "foo"], monkeypatch, db)
+    assert add_res.exit_code == 0
+
+    remove_res = run(["remove", "foo"], monkeypatch, db)
+    assert remove_res.exit_code == 0
+
+    assert any(isinstance(event, UserAdded) for event in events)
+    assert any(isinstance(event, UserRemoved) for event in events)
+
+
+def test_notify_about_remove_message(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "wl.db"
+    messages: list[str] = []
+
+    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
+    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
+    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
+
+    async def capture_send_message(
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
+    ) -> None:
+        messages.append(text)
+
+    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
+    monkeypatch.setattr(TelegramNotifier, "send_message", capture_send_message, raising=False)
+
+    container = container_mod.Container(Settings())
+
+    try:
+        asyncio.run(container.event_bus.publish(UserRemoved(login="foo")))
+    finally:
+        asyncio.run(container.aclose())
+
+    assert messages == ["➖ <code>foo</code> удалён из списка наблюдения"]
