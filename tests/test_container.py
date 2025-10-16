@@ -48,6 +48,9 @@ class FakeTwitch:
     def close(self) -> None:
         self.closed = True
 
+    async def aclose(self) -> None:
+        self.closed = True
+
 
 @pytest.fixture
 def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
