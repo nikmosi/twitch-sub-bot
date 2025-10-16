@@ -132,7 +132,7 @@ def watch(
                 await t
             except TimeoutError as exc:  # pragma: no cover - defensive logging
                 logger.opt(exception=exc).warning(
-                    "%s can't complete with %s s.", t.get_name(), timeout
+                    f"{t} can't complete with {timeout} s.",
                 )
 
     def shutdown() -> None:
@@ -188,10 +188,9 @@ def watch(
     raise typer.Exit(main())
 
 
-@app.command("add", help="Add a Twitch username to the watchlist")
-def add(
-    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    notify: bool = typer.Option(True, "--notify", "-n", help="Publish notification event"),
+async def _add(
+    usernames: list[str],
+    notify: bool,
 ) -> None:
     container = Container(Settings())
     bus: EventBus | None = container.event_bus if notify else None
@@ -207,9 +206,19 @@ def add(
                 if notify and bus is not None:
                     pending_events.append(UserAdded(login=username))
         if pending_events and bus is not None:
-            asyncio.run(bus.publish(*pending_events))
+            await bus.publish(*pending_events)
     finally:
-        asyncio.run(container.aclose())
+        await container.aclose()
+
+
+@app.command("add", help="Add a Twitch username to the watchlist")
+def add(
+    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
+    notify: bool = typer.Option(
+        True, "--notify", "-n", help="Publish notification event"
+    ),
+) -> None:
+    return asyncio.run(_add(usernames, notify))
 
 
 @app.command("list", help="List Twitch usernames in watchlist")
@@ -228,16 +237,10 @@ def list_cmd() -> None:
         asyncio.run(container.aclose())
 
 
-@app.command("remove", help="Remove a Twitch username from the watchlist")
-def remove(
-    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    quiet: bool = typer.Option(
-        False,
-        "--quiet",
-        "-q",
-        help="Exit 0 even if username was absent",
-    ),
-    notify: bool = typer.Option(True, "--notify", "-n", help="Publish notification event"),
+async def _remove(
+    usernames: list[str],
+    quiet: bool,
+    notify: bool,
 ) -> None:
     container = Container(Settings())
     bus: EventBus | None = container.event_bus if notify else None
@@ -257,9 +260,25 @@ def remove(
                 typer.echo(f"{username} not found", err=True)
                 raise typer.Exit(1)
         if pending_events and bus is not None:
-            asyncio.run(bus.publish(*pending_events))
+            await bus.publish(*pending_events)
     finally:
-        asyncio.run(container.aclose())
+        await container.aclose()
+
+
+@app.command("remove", help="Remove a Twitch username from the watchlist")
+def remove(
+    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Exit 0 even if username was absent",
+    ),
+    notify: bool = typer.Option(
+        True, "--notify", "-n", help="Publish notification event"
+    ),
+) -> None:
+    return asyncio.run(_remove(usernames, quiet, notify))
 
 
 def main() -> None:  # pragma: no cover - CLI entry point
