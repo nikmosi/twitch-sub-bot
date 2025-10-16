@@ -208,7 +208,7 @@ class Container:
         self._notifier = None
 
         if self._twitch is not None:
-            self._twitch.close()
+            await self._twitch.aclose()
             self._twitch = None
 
         if self._engine is not None:

@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import time
 from typing import Any
 
@@ -32,7 +31,7 @@ class TwitchClient(TwitchClientProtocol):
             raise TwitchAuthError(
                 "TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set"
             )
-        self._http = httpx.Client(base_url=TWITCH_API, timeout=timeout)
+        self._http = httpx.AsyncClient(base_url=TWITCH_API, timeout=timeout)
         self._token: str | None = None
         self._token_exp: float = 0.0
         self._limiter = AsyncLimiter(10, 10)
@@ -58,13 +57,15 @@ class TwitchClient(TwitchClientProtocol):
     async def _get(
         self, path: str, *, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
-        self._ensure_token()
+        await self._ensure_token()
         async with self._limiter:
-            r = self._http.get(path, params=params, headers=self._auth_headers())
+            r = await self._http.get(path, params=params, headers=self._auth_headers())
         if r.status_code == 401:
             logger.warning("Twitch 401: refreshing token and retrying once…")
-            self._refresh_app_token()
-            r = self._http.get(path, params=params, headers=self._auth_headers())
+            await self._refresh_app_token()
+            r = await self._http.get(
+                path, params=params, headers=self._auth_headers()
+            )
         r.raise_for_status()
         return r.json()
 
@@ -75,18 +76,18 @@ class TwitchClient(TwitchClientProtocol):
             "Authorization": f"Bearer {self._token}",
         }
 
-    def close(self) -> None:
+    async def aclose(self) -> None:
         """Close the underlying HTTP client."""
 
-        self._http.close()
+        await self._http.aclose()
 
-    def _ensure_token(self) -> None:
+    async def _ensure_token(self) -> None:
         if not self._token or time.time() >= (self._token_exp - 60):
-            self._refresh_app_token()
+            await self._refresh_app_token()
 
-    def _refresh_app_token(self) -> None:
+    async def _refresh_app_token(self) -> None:
         logger.info("Refreshing Twitch app token…")
-        r = httpx.post(
+        r = await self._http.post(
             TWITCH_TOKEN_URL,
             data={
                 "client_id": self.client_id,
