@@ -16,7 +16,6 @@ from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
     LoginStatus,
-    SubState,
 )
 
 
