@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 from dataclasses import dataclass
 from typing import Any
 
@@ -122,13 +121,11 @@ class Container:
         if self._tg_session is None:
             self._tg_session = AiohttpSession()
         if self._telegram_bot is None:
-            bot_kwargs: dict[str, Any] = {
-                "token": self.settings.telegram_bot_token,
-                "default": DefaultBotProperties(parse_mode=ParseMode.HTML),
-            }
-            if "session" in inspect.signature(Bot).parameters:
-                bot_kwargs["session"] = self._tg_session
-            self._telegram_bot = Bot(**bot_kwargs)
+            self._telegram_bot = Bot(
+                token=self.settings.telegram_bot_token,
+                default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+                session=self._tg_session,
+            )
         return self._telegram_bot
 
     @property
