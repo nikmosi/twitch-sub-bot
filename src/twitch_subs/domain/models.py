@@ -43,19 +43,14 @@ class SubState:
     status: BroadcasterType
     since: datetime | None = None
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-
-    def _resolve_status_from_bool(
-        self, is_subscribed: bool, tier: str | None
-    ) -> BroadcasterType:
-        if not is_subscribed:
-            return BroadcasterType.NONE
-        if tier:
-            try:
-                return BroadcasterType(tier)
-            except ValueError:
-                pass
-        return BroadcasterType.AFFILIATE
+    tier: str | None = None
 
     @property
     def is_subscribed(self) -> bool:
         return self.status.is_subscribable()
+
+
+@dataclass(frozen=True)
+class LoginReportInfo:
+    login: str
+    broadcaster: BroadcasterType = field(default=BroadcasterType.NONE)

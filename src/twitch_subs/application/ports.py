@@ -6,6 +6,7 @@ from typing import Awaitable, Callable, Protocol, Sequence, TypeVar
 from twitch_subs.domain.events import DomainEvent
 from twitch_subs.domain.models import (
     BroadcasterType,
+    LoginReportInfo,
     LoginStatus,
     SubState,
     UserRecord,
@@ -18,7 +19,12 @@ Handler = Callable[[E], Awaitable[None]]
 
 class EventBus(Protocol):
     async def publish(self, *events: DomainEvent) -> None: ...
+
     def subscribe(self, event_type: type[DomainEvent], handler: Handler[E]) -> None: ...
+
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
 
 
 class TwitchClientProtocol(Protocol):
@@ -37,7 +43,7 @@ class NotifierProtocol(Protocol):
 
     async def notify_report(
         self,
-        states: Sequence[SubState],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None: ...  # pragma: no cover

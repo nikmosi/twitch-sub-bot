@@ -1,29 +1,22 @@
 from __future__ import annotations
 
 from asyncio import AbstractEventLoop
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import tzinfo
-from typing import (
-    Any,
-    Awaitable,
-    Mapping,
-    ParamSpec,
-    Protocol,
-    Sequence,
-    cast,
-)
+from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 
 # pyright: reportMissingTypeStubs=false
 import aiocron
 
+from twitch_subs.application.error import RepoCantFintLoginError
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
     SubscriptionStateRepo,
 )
 from twitch_subs.domain.events import DayChanged, LoopChecked, LoopCheckFailed
-from twitch_subs.domain.models import BroadcasterType, SubState
+from twitch_subs.domain.models import LoginReportInfo
 
 
 @dataclass(slots=True)
@@ -53,15 +46,13 @@ class DailyReportCollector:
         states = self._collect_states(self.tracked_logins)
         await self.notifier.notify_report(states, self.checks, self.errors)
 
-    def _collect_states(self, logins: Iterable[str]) -> list[SubState]:
-        report: list[SubState] = []
+    def _collect_states(self, logins: Iterable[str]) -> list[LoginReportInfo]:
+        report: list[LoginReportInfo] = []
         for login in sorted(logins):
             state = self.state_repo.get_sub_state(login)
-            if state and state.is_subscribed:
-                broadcaster = state.status
-            else:
-                broadcaster = BroadcasterType.NONE
-            report.append(SubState(login, broadcaster))
+            if state is None:
+                raise RepoCantFintLoginError(login=login)
+            report.append(LoginReportInfo(login, state.status))
         return report
 
     def _reset(self) -> None:

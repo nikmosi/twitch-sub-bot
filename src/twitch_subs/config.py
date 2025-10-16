@@ -14,6 +14,16 @@ class Settings(BaseSettings):
     )
     database_echo: bool = Field(default=False, validation_alias="DB_ECHO")
     report_cron: str = Field(default="0 0 * * *", validation_alias="REPORT_CRON")
+    rabbitmq_url: str | None = Field(default=None, validation_alias="RABBITMQ_URL")
+    rabbitmq_exchange: str = Field(
+        default="twitch_subs.events", validation_alias="RABBITMQ_EXCHANGE"
+    )
+    rabbitmq_queue: str | None = Field(
+        default="twitch_subs.watcher", validation_alias="RABBITMQ_QUEUE"
+    )
+    rabbitmq_prefetch: int = Field(
+        default=10, validation_alias="RABBITMQ_PREFETCH"
+    )
 
     @field_validator("database_echo", mode="before")
     @classmethod

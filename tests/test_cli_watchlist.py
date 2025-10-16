@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import os
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -8,10 +11,18 @@ from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
-from twitch_subs.config import Settings
-from twitch_subs.domain.events import UserAdded, UserRemoved
+from twitch_subs.application.event_handlers import register_notification_handlers
+from twitch_subs.domain.events import (
+    DayChanged,
+    LoopCheckFailed,
+    LoopChecked,
+    OnceChecked,
+    UserAdded,
+    UserBecomeSubscribtable,
+    UserRemoved,
+)
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
-from twitch_subs.infrastructure.telegram import TelegramNotifier
+from twitch_subs.domain.models import BroadcasterType
 
 
 class DummyAiogramBot:
@@ -20,13 +31,33 @@ class DummyAiogramBot:
         token: str,
         default: Any | None = None,
         session: Any | None = None,
-    ) -> None:  # noqa: D401
+    ) -> None:
         self.token = token
         self.default = default
         self.session = session
 
-    async def close(self) -> None:  # noqa: D401
+    async def close(self) -> None:
         return None
+
+
+class StubEventBus:
+    def __init__(self) -> None:
+        self.published: list[Any] = []
+        self.started = 0
+        self.stopped = 0
+        self.subscriptions: list[tuple[type[Any], Any]] = []
+
+    async def publish(self, *events: Any) -> None:
+        self.published.extend(events)
+
+    async def start(self) -> None:
+        self.started += 1
+
+    async def stop(self) -> None:
+        self.stopped += 1
+
+    def subscribe(self, event_type: type[Any], handler: Any) -> None:
+        self.subscriptions.append((event_type, handler))
 
 
 def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
@@ -89,20 +120,12 @@ def test_remove_emits_user_removed_event(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     db = tmp_path / "wl.db"
-    events: list[object] = []
-
-    class StubEventBus:
-        async def publish(self, *published_events: object) -> None:  # noqa: D401
-            events.extend(published_events)
-
     stub_bus = StubEventBus()
 
-    monkeypatch.setattr(cli, "_get_notifier", lambda container: object())
-    monkeypatch.setattr(
-        container_mod.Container,
-        "event_bus",
-        property(lambda self: stub_bus),
-    )
+    def fake_event_bus(self: container_mod.Container) -> StubEventBus:
+        return stub_bus
+
+    monkeypatch.setattr(container_mod.Container, "event_bus", property(fake_event_bus))
 
     add_res = run(["add", "foo"], monkeypatch, db)
     assert add_res.exit_code == 0
@@ -110,38 +133,61 @@ def test_remove_emits_user_removed_event(
     remove_res = run(["remove", "foo"], monkeypatch, db)
     assert remove_res.exit_code == 0
 
-    assert any(isinstance(event, UserAdded) for event in events)
-    assert any(isinstance(event, UserRemoved) for event in events)
+    assert any(isinstance(event, UserAdded) for event in stub_bus.published)
+    assert any(isinstance(event, UserRemoved) for event in stub_bus.published)
 
 
-def test_notify_about_remove_message(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    db = tmp_path / "wl.db"
+@pytest.mark.asyncio
+async def test_register_notification_handlers_sends_messages() -> None:
     messages: list[str] = []
+    notified: list[str] = []
 
-    monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "123")
+    class FakeNotifier:
+        async def send_message(self, text: str, **_: Any) -> None:
+            messages.append(text)
 
-    async def capture_send_message(
-        self,
-        text: str,
-        disable_web_page_preview: bool = True,
-        disable_notification: bool = False,
-    ) -> None:
-        messages.append(text)
+        async def notify_about_change(self, status: Any, curr: Any) -> None:
+            notified.append(f"{status.login}:{curr.value}")
 
-    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
-    monkeypatch.setattr(TelegramNotifier, "send_message", capture_send_message, raising=False)
+        async def notify_report(self, *args: Any, **kwargs: Any) -> None:
+            return None
 
-    container = container_mod.Container(Settings())
+        async def notify_about_start(self) -> None:
+            return None
 
-    try:
-        asyncio.run(container.event_bus.publish(UserRemoved(login="foo")))
-    finally:
-        asyncio.run(container.aclose())
+        async def notify_about_stop(self) -> None:
+            return None
 
-    assert messages == ["➖ <code>foo</code> удалён из списка наблюдения"]
+    class FakeRepo:
+        def get_sub_state(self, login: str) -> Any:
+            return None
+
+    bus = StubEventBus()
+    notifier = FakeNotifier()
+    register_notification_handlers(bus, notifier, FakeRepo())
+
+    # Extract handlers and invoke manually
+    for event_type, handler in bus.subscriptions:
+        if event_type is UserRemoved:
+            await handler(UserRemoved(login="foo"))
+        if event_type is UserAdded:
+            await handler(UserAdded(login="bar"))
+        if event_type is OnceChecked:
+            await handler(OnceChecked(login="foo", current_state=BroadcasterType.PARTNER))
+        if event_type is LoopChecked:
+            await handler(LoopChecked(logins=("foo", "bar")))
+        if event_type is LoopCheckFailed:
+            await handler(LoopCheckFailed(logins=("foo",), error="boom"))
+        if event_type is DayChanged:
+            await handler(DayChanged())
+        if event_type is UserBecomeSubscribtable:
+            await handler(
+                UserBecomeSubscribtable(
+                    login="foo", current_state=BroadcasterType.AFFILIATE
+                )
+            )
+
+    assert set(messages) == {
+        "➖ <code>foo</code> удалён из списка наблюдения",
+        "➕ <code>bar</code> добавлен в список наблюдения",
+    }

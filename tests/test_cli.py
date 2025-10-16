@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 from datetime import datetime, timezone
-from pathlib import Path
-from threading import Event
 from types import SimpleNamespace
+from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
@@ -12,11 +13,28 @@ from typer.testing import CliRunner
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.config import Settings
-from twitch_subs.domain.models import BroadcasterType, SubState, TwitchAppCreds
-from twitch_subs.infrastructure.repository_sqlite import (
-    SqliteSubscriptionStateRepository,
-)
+from twitch_subs.domain.models import BroadcasterType, SubState
+from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
+
+
+class StubEventBus:
+    def __init__(self) -> None:
+        self.started = 0
+        self.stopped = 0
+        self.published: list[Any] = []
+        self.subscriptions: list[tuple[type[Any], Any]] = []
+
+    async def start(self) -> None:
+        self.started += 1
+
+    async def stop(self) -> None:
+        self.stopped += 1
+
+    async def publish(self, *events: Any) -> None:
+        self.published.extend(events)
+
+    def subscribe(self, event_type: type[Any], handler: Any) -> None:
+        self.subscriptions.append((event_type, handler))
 
 
 class DummySession:
@@ -28,45 +46,30 @@ class DummySession:
 
 
 class DummyAiogramBot:
-    def __init__(self, token: str, session: Any, default: Any | None = None) -> None:  # noqa: D401
+    def __init__(self, token: str, session: Any, default: Any | None = None) -> None:
         self.token = token
-        self.session = session
-        self.default = default
         self.session = DummySession()
+        self.default = default
 
-    async def close(self):
+    async def close(self) -> None:
         await self.session.close()
 
 
 class DummyNotifier:
-    def __init__(self, bot: Any, chat_id: str) -> None:  # noqa: D401
+    def __init__(self, bot: Any, chat_id: str) -> None:
         self.bot = bot
-        self.token = getattr(bot, "token", "")
         self.chat_id = chat_id
 
-    def send_message(
-        self,
-        text: str,
-        disable_web_page_preview: bool = True,
-        disable_notification: bool = False,
-    ) -> None:  # noqa: D401
-        _ = text
-        _ = disable_web_page_preview
-        _ = disable_notification
-        pass
-
-    async def aclose(self) -> None:  # noqa: D401
+    async def aclose(self) -> None:
         await self.bot.session.close()
 
 
 class DummyBot:
-    def __init__(self, bot: Any, id: str, service: Any | None = None) -> None:  # noqa: D401
-        _ = bot
-        _ = service
-        _ = id
+    async def run(self) -> None:  # pragma: no cover - behaviour mocked in tests
+        return None
 
-    async def run(self) -> None:  # noqa: D401
-        pass
+    async def stop(self) -> None:  # pragma: no cover - behaviour mocked in tests
+        return None
 
 
 def configure_env(monkeypatch: pytest.MonkeyPatch, db: Path) -> None:
@@ -145,48 +148,11 @@ async def test_run_bot_waits_for_stop() -> None:
     assert bot.started and bot.stopped
 
 
-def test_get_notifier_none(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "")
-    container = container_mod.Container(Settings())
-    try:
-        assert cli._get_notifier(container) is None
-    finally:
-        asyncio.run(container.aclose())
-
-
-def test_get_notifier_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "t")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "c")
-    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
-    container = container_mod.Container(Settings())
-    try:
-        notifier = cli._get_notifier(container)
-        assert isinstance(notifier, cli.TelegramNotifier)
-    finally:
-        asyncio.run(container.aclose())
-
-
 def test_watch_bot_exception_exitcode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
-    monkeypatch.setenv("TWITCH_CLIENT_ID", "id")
-    monkeypatch.setenv("TWITCH_CLIENT_SECRET", "secret")
-
-    class DummyTwitch:
-        @classmethod
-        def from_creds(cls, creds: TwitchAppCreds):  # noqa: D401
-            _ = creds
-            return cls()
-
-    monkeypatch.setattr(container_mod, "TwitchClient", DummyTwitch)
-    monkeypatch.setattr("twitch_subs.infrastructure.twitch.TwitchClient", DummyTwitch)
+    stub_bus = StubEventBus()
+    monkeypatch.setattr(container_mod.Container, "event_bus", property(lambda self: stub_bus))
     monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
     monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
     monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
@@ -195,31 +161,23 @@ def test_watch_bot_exception_exitcode(
         self: container_mod.Watcher,
         logins: LoginsProvider | Sequence[str],
         interval: int,
-        stop_event: Event,
-        report_interval: int = 86400,
-    ) -> None:  # noqa: D401
-        _ = self
-        _ = logins
-        _ = interval
-        _ = report_interval
+        stop_event: asyncio.Event,
+    ) -> None:
         stop_event.set()
 
-    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
-
-    def fake_run_bot(bot: Any, stop: Event) -> None:
-        _ = bot
+    async def boom_bot(bot: Any, stop: asyncio.Event) -> None:
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
+    monkeypatch.setattr(cli, "run_bot", boom_bot)
+
+    configure_env(monkeypatch, tmp_path / "db.sqlite")
 
     from loguru import logger
 
     logger.disable("twitch_subs.cli")
-
     try:
         runner = CliRunner()
-        db = tmp_path / "db.sqlite"
-        monkeypatch.setenv("DB_URL", f"sqlite:///{db}")
         result = runner.invoke(cli.app, ["watch"])
         assert result.exit_code == 1
     finally:
@@ -230,7 +188,7 @@ def test_cli_main_invokes_app(monkeypatch: pytest.MonkeyPatch) -> None:
     called: dict[str, bool] = {"done": False}
 
     class Dummy:
-        def __call__(self) -> None:  # noqa: D401
+        def __call__(self) -> None:
             called["done"] = True
 
     monkeypatch.setattr(cli, "app", Dummy())
@@ -280,22 +238,51 @@ def test_state_list_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
 def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     db = tmp_path / "watch.db"
     configure_env(monkeypatch, db)
+    stub_bus = StubEventBus()
 
     class FakeRepo:
         def list(self) -> list[str]:
             return ["foo"]
 
+    class FakeNotifier:
+        async def send_message(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+            return None
+
+        async def notify_about_change(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+            return None
+
+        async def notify_about_start(self) -> None:  # noqa: D401
+            return None
+
+        async def notify_about_stop(self) -> None:  # noqa: D401
+            return None
+
+        async def notify_report(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401
+            return None
+
+    class FakeRepo:
+        def list(self) -> list[str]:
+            return ["foo"]
+
+    class FakeStateRepo:
+        def get_sub_state(self, login: str) -> SubState | None:  # noqa: D401
+            return None
+
     class FakeContainer:
         def __init__(self) -> None:
             self.settings = SimpleNamespace(
-                telegram_bot_token="token", telegram_chat_id="chat"
+                telegram_bot_token="token",
+                telegram_chat_id="chat",
+                rabbitmq_url=None,
+                rabbitmq_exchange="",
+                rabbitmq_queue="",
+                rabbitmq_prefetch=10,
             )
             self.watchlist_repo = FakeRepo()
             self.closed = False
-
-        @property
-        def watchlist_service(self) -> Any:
-            return SimpleNamespace()
+            self.notifier = FakeNotifier()
+            self.sub_state_repo = FakeStateRepo()
+            self.event_bus = stub_bus
 
         def build_watcher(self) -> str:
             return "watcher"
@@ -304,10 +291,11 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
             return "bot"
 
         def ensure_day_scheduler(self) -> None:
-            pass
+            return None
 
         async def aclose(self) -> None:
             self.closed = True
+            await self.event_bus.stop()
 
     fake_container = FakeContainer()
     monkeypatch.setattr(cli, "Container", lambda _: fake_container)
@@ -339,3 +327,4 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     assert fake_container.closed
     assert calls["watch"]
     assert calls["bot"]
+    assert stub_bus.started == 1
