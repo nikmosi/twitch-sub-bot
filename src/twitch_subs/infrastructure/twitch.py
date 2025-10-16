@@ -34,6 +34,7 @@ class TwitchClient(TwitchClientProtocol):
         self._http = httpx.AsyncClient(base_url=TWITCH_API, timeout=timeout)
         self._token: str | None = None
         self._token_exp: float = 0.0
+        # TODO: extract to config
         self._limiter = AsyncLimiter(10, 10)
 
     @classmethod
