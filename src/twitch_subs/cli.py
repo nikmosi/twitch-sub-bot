@@ -13,7 +13,7 @@ from loguru import logger
 
 from twitch_subs.application.ports import WatchlistRepository
 from twitch_subs.application.watcher import Watcher
-from twitch_subs.domain.events import UserAdded
+from twitch_subs.domain.events import UserAdded, UserRemoved
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
@@ -239,7 +239,7 @@ def remove(
             if removed:
                 typer.echo(f"Removed {username}")
                 if should_notify and event_bus is not None:
-                    asyncio.run(event_bus.publish(UserAdded(login=username)))
+                    asyncio.run(event_bus.publish(UserRemoved(login=username)))
             else:
                 if quiet:
                     return

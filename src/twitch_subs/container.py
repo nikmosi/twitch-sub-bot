@@ -142,7 +142,7 @@ class Container:
 
             async def notify_about_remove(event: UserRemoved) -> None:
                 await notifier.send_message(
-                    f"➕ <code>{event.login}</code> добавлен в список наблюдения"
+                    f"➖ <code>{event.login}</code> удалён из списка наблюдения"
                 )
 
             async def notify_about_subs_change(event: UserBecomeSubscribtable) -> None:
