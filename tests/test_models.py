@@ -1,4 +1,5 @@
 import pytest
+from datetime import datetime, timezone
 
 from twitch_subs.domain.models import (
     BroadcasterType,
@@ -27,7 +28,12 @@ def test_login_report_info_accepts_enum_and_str() -> None:
 def test_sub_state_normalizes_inputs(
     raw_status: bool, tier: str | None, expected_type: BroadcasterType, expected_tier: str | None
 ) -> None:
-    state = SubState("foo", raw_status, tier=tier)
+    state = SubState(
+        "foo",
+        raw_status,
+        tier=tier,
+        updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
 
     assert state.status is expected_type
     assert state.tier == expected_tier

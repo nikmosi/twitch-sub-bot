@@ -23,7 +23,9 @@ from twitch_subs.domain.events import (
     UserBecomeSubscribtable,
     UserRemoved,
 )
+from twitch_subs.domain.protocols import Clock, IdProvider
 from twitch_subs.infrastructure.event_bus.in_memory import InMemoryEventBus
+from twitch_subs.infrastructure.system import SystemClock, Uuid4Provider
 
 from .application.watcher import Watcher
 from .config import Settings
@@ -53,6 +55,8 @@ class Container:
     _report_collector: DailyReportCollector | None = None
     _day_scheduler: DayChangeScheduler | None = None
     _day_scheduler_pending: bool = False
+    _clock: Clock | None = None
+    _id_provider: IdProvider | None = None
 
     @property
     def watchlist_service(self) -> WatchlistService:
@@ -104,7 +108,12 @@ class Container:
 
     def build_watcher(self) -> Watcher:
         watcher = Watcher(
-            self.twitch_client, self.notifier, self.sub_state_repo, self.event_bus
+            self.twitch_client,
+            self.notifier,
+            self.sub_state_repo,
+            self.event_bus,
+            self.clock,
+            self.id_provider,
         )
         self.ensure_day_scheduler()
         return watcher
@@ -178,10 +187,25 @@ class Container:
 
         return self._event_bus
 
+    @property
+    def clock(self) -> Clock:
+        if self._clock is None:
+            self._clock = SystemClock()
+        return self._clock
+
+    @property
+    def id_provider(self) -> IdProvider:
+        if self._id_provider is None:
+            self._id_provider = Uuid4Provider()
+        return self._id_provider
+
     def ensure_day_scheduler(self) -> None:
         if self._day_scheduler is None:
             self._day_scheduler = DayChangeScheduler(
-                self.event_bus, cron=self.settings.report_cron
+                event_bus=self.event_bus,
+                clock=self.clock,
+                id_provider=self.id_provider,
+                cron=self.settings.report_cron,
             )
             self._day_scheduler_pending = True
 

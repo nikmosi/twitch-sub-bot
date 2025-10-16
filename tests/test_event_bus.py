@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 
 import pytest
 
@@ -15,7 +16,11 @@ async def test_in_memory_event_bus_dispatches_matching_events() -> None:
         received.append(event)
 
     bus.subscribe(DayChanged, handler)
-    await bus.publish(DayChanged(), LoopChecked(logins=("foo",)))
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    await bus.publish(
+        DayChanged(id="id-1", occurred_at=now),
+        LoopChecked(id="id-2", occurred_at=now, logins=("foo",)),
+    )
 
     assert len(received) == 1
     assert isinstance(received[0], DayChanged)
@@ -30,6 +35,7 @@ async def test_in_memory_event_bus_ignores_non_matching_events() -> None:
         triggered.set()
 
     bus.subscribe(LoopChecked, handler)
-    await bus.publish(DayChanged())
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    await bus.publish(DayChanged(id="id-3", occurred_at=now))
 
     assert not triggered.is_set()

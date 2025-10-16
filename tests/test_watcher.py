@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Iterable, Sequence
+from datetime import datetime, timezone
 
 import pytest
 
@@ -18,6 +19,25 @@ from twitch_subs.domain.events import (
     UserBecomeSubscribtable,
 )
 from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
+
+
+class FakeClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+        self.calls: int = 0
+
+    def now(self) -> datetime:
+        self.calls += 1
+        return self._now
+
+
+class FakeIdProvider:
+    def __init__(self) -> None:
+        self.counter = 0
+
+    def new_id(self) -> str:
+        self.counter += 1
+        return f"id-{self.counter}"
 
 
 class FakeTwitch(TwitchClientProtocol):
@@ -98,9 +118,17 @@ class StaticLogins(LoginsProvider):
 async def test_run_once_detects_subscription_change() -> None:
     user = UserRecord("1", "foo", "Foo", BroadcasterType.AFFILIATE)
     twitch = FakeTwitch({"foo": user})
-    repo = FakeRepo([SubState("foo", BroadcasterType.NONE)])
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    repo = FakeRepo([SubState("foo", BroadcasterType.NONE, updated_at=now)])
     bus = FakeEventBus()
-    watcher = Watcher(twitch, FakeNotifier(), repo, bus)
+    watcher = Watcher(
+        twitch,
+        FakeNotifier(),
+        repo,
+        bus,
+        FakeClock(now),
+        FakeIdProvider(),
+    )
 
     changed = await watcher.run_once(["foo"], asyncio.Event())
 
@@ -115,9 +143,17 @@ async def test_run_once_detects_subscription_change() -> None:
 @pytest.mark.asyncio
 async def test_run_once_stops_when_event_is_set() -> None:
     twitch = FakeTwitch({"foo": None})
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
     repo = FakeRepo()
     bus = FakeEventBus()
-    watcher = Watcher(twitch, FakeNotifier(), repo, bus)
+    watcher = Watcher(
+        twitch,
+        FakeNotifier(),
+        repo,
+        bus,
+        FakeClock(now),
+        FakeIdProvider(),
+    )
 
     stop_event = asyncio.Event()
     stop_event.set()
@@ -131,9 +167,19 @@ async def test_run_once_stops_when_event_is_set() -> None:
 @pytest.mark.asyncio
 async def test_run_once_handles_subscription_drop() -> None:
     twitch = FakeTwitch({"foo": None})
-    repo = FakeRepo([SubState("foo", BroadcasterType.AFFILIATE)])
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    repo = FakeRepo(
+        [SubState("foo", BroadcasterType.AFFILIATE, updated_at=now)]
+    )
     bus = FakeEventBus()
-    watcher = Watcher(twitch, FakeNotifier(), repo, bus)
+    watcher = Watcher(
+        twitch,
+        FakeNotifier(),
+        repo,
+        bus,
+        FakeClock(now),
+        FakeIdProvider(),
+    )
 
     changed = await watcher.run_once(["foo"], asyncio.Event())
 
@@ -148,7 +194,15 @@ async def test_watch_publishes_failures_and_stops() -> None:
     repo = FakeRepo()
     bus = FakeEventBus()
     notifier = FakeNotifier()
-    watcher = Watcher(twitch, notifier, repo, bus)
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    watcher = Watcher(
+        twitch,
+        notifier,
+        repo,
+        bus,
+        FakeClock(now),
+        FakeIdProvider(),
+    )
 
     async def failing_run_once(logins: Sequence[str], stop_event: asyncio.Event) -> bool:
         raise RuntimeError("boom")
@@ -177,7 +231,15 @@ async def test_watch_handles_timeout() -> None:
     repo = FakeRepo()
     bus = FakeEventBus()
     notifier = FakeNotifier()
-    watcher = Watcher(twitch, notifier, repo, bus)
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    watcher = Watcher(
+        twitch,
+        notifier,
+        repo,
+        bus,
+        FakeClock(now),
+        FakeIdProvider(),
+    )
 
     stop_event = asyncio.Event()
     provider = StaticLogins(["foo"])

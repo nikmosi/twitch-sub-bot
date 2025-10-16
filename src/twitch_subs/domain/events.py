@@ -1,24 +1,15 @@
-import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Sequence
 
 
 from twitch_subs.domain.models import BroadcasterType
 
 
-def _new_id() -> str:
-    return str(uuid.uuid4())
-
-
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 @dataclass(frozen=True, slots=True, kw_only=True)
 class DomainEvent:
-    id: str = field(default_factory=_new_id)
-    occurred_at: datetime = field(default_factory=_utcnow)
+    id: str
+    occurred_at: datetime
 
     def name(self) -> str:
         return type(self).__name__

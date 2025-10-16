@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 import pytest
 
@@ -82,7 +83,11 @@ def test_subscription_state_repo_protocol_subclass() -> None:
                 self.data[st.login] = st
 
     repo = Impl()
-    st = SubState("foo", BroadcasterType.AFFILIATE)
+    st = SubState(
+        "foo",
+        BroadcasterType.AFFILIATE,
+        updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+    )
     repo.upsert_sub_state(st)
     assert repo.get_sub_state("foo") == st
 

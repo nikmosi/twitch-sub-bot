@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import datetime, timezone
 
 import pytest
 
@@ -71,20 +72,50 @@ class StubCron:
         self.stopped = True
 
 
+class StubClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def now(self) -> datetime:
+        return self._now
+
+
+class StubIdProvider:
+    def __init__(self) -> None:
+        self.counter = 0
+
+    def new_id(self) -> str:
+        self.counter += 1
+        return f"id-{self.counter}"
+
+
 @pytest.mark.asyncio
 async def test_collector_sends_report_and_resets() -> None:
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
     repo = StubRepo(
         [
-            SubState("foo", True, tier=BroadcasterType.AFFILIATE.value, since=None),
-            SubState("bar", False, tier=None, since=None),
+            SubState(
+                "foo",
+                True,
+                tier=BroadcasterType.AFFILIATE.value,
+                since=None,
+                updated_at=now,
+            ),
+            SubState("bar", False, tier=None, since=None, updated_at=now),
         ]
     )
     notifier = StubNotifier()
     collector = DailyReportCollector(notifier, repo)
 
-    await collector.handle_loop_checked(LoopChecked(logins=("foo",)))
-    await collector.handle_loop_failed(LoopCheckFailed(logins=("bar",), error="boom"))
-    await collector.handle_day_changed(DayChanged())
+    await collector.handle_loop_checked(
+        LoopChecked(id="id-1", occurred_at=now, logins=("foo",))
+    )
+    await collector.handle_loop_failed(
+        LoopCheckFailed(
+            id="id-2", occurred_at=now, logins=("bar",), error="boom"
+        )
+    )
+    await collector.handle_day_changed(DayChanged(id="id-3", occurred_at=now))
 
     assert notifier.reports == [
         (
@@ -113,7 +144,13 @@ async def test_scheduler_emits_day_changed() -> None:
         created["func"] = func
         return StubCron(func)
 
-    scheduler = DayChangeScheduler(bus, cron="*/5 * * * *")
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    scheduler = DayChangeScheduler(
+        event_bus=bus,
+        clock=StubClock(now),
+        id_provider=StubIdProvider(),
+        cron="*/5 * * * *",
+    )
     scheduler._crontab_factory = fake_crontab
     scheduler.start()
 
@@ -126,6 +163,7 @@ async def test_scheduler_emits_day_changed() -> None:
 
     await created["func"]()
     assert bus.events and isinstance(bus.events[0], DayChanged)
+    assert bus.events[0].occurred_at == now
 
     scheduler.stop()
     assert scheduler._cron_job is None
@@ -134,7 +172,12 @@ async def test_scheduler_emits_day_changed() -> None:
 def test_scheduler_idempotent_start_and_stop() -> None:
     bus = StubEventBus()
 
-    scheduler = DayChangeScheduler(bus)
+    now = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    scheduler = DayChangeScheduler(
+        event_bus=bus,
+        clock=StubClock(now),
+        id_provider=StubIdProvider(),
+    )
     scheduler._crontab_factory = lambda *args, **kwargs: StubCron(kwargs.get("func"))
 
     scheduler.start()

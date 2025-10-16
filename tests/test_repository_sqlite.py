@@ -1,5 +1,6 @@
 from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import text
 
@@ -52,11 +53,16 @@ def test_subscription_state_crud(tmp_path: Path) -> None:
         "foo",
         BroadcasterType.AFFILIATE,
         since=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     repo.upsert_sub_state(st)
     loaded = repo.get_sub_state("foo")
     assert loaded is not None and loaded.is_subscribed
-    st2 = SubState("foo", BroadcasterType.NONE)
+    st2 = SubState(
+        "foo",
+        BroadcasterType.NONE,
+        updated_at=datetime(2024, 1, 2, tzinfo=timezone.utc),
+    )
     repo.upsert_sub_state(st2)
     loaded2 = repo.get_sub_state("foo")
     assert loaded2 is not None and not loaded2.is_subscribed
@@ -65,10 +71,20 @@ def test_subscription_state_crud(tmp_path: Path) -> None:
 def test_subscription_state_set_many(tmp_path: Path) -> None:
     db = tmp_path / "many.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    repo.set_many([
-        SubState("a", BroadcasterType.AFFILIATE),
-        SubState("b", BroadcasterType.NONE),
-    ])
+    repo.set_many(
+        [
+            SubState(
+                "a",
+                BroadcasterType.AFFILIATE,
+                updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ),
+            SubState(
+                "b",
+                BroadcasterType.NONE,
+                updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+            ),
+        ]
+    )
     rows = repo.list_all()
     assert {r.login for r in rows} == {"a", "b"}
 
@@ -76,7 +92,13 @@ def test_subscription_state_set_many(tmp_path: Path) -> None:
 def test_subscription_state_iso(tmp_path: Path) -> None:
     db = tmp_path / "iso.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    repo.upsert_sub_state(SubState("foo", BroadcasterType.PARTNER))
+    repo.upsert_sub_state(
+        SubState(
+            "foo",
+            BroadcasterType.PARTNER,
+            updated_at=datetime(2024, 1, 1, tzinfo=timezone.utc),
+        )
+    )
     with repo.engine.connect() as conn:
         ts = conn.execute(
             text("SELECT updated_at FROM subscription_state")

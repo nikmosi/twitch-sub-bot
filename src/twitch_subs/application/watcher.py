@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from datetime import datetime, timezone
 
 from loguru import logger
 
 from twitch_subs.application.logins import LoginsProvider
+from .ports import (
+    EventBus,
+    NotifierProtocol,
+    SubscriptionStateRepo,
+    TwitchClientProtocol,
+)
 from twitch_subs.domain.events import (
     LoopChecked,
     LoopCheckFailed,
@@ -14,13 +19,7 @@ from twitch_subs.domain.events import (
     UserBecomeSubscribtable,
 )
 from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
-
-from .ports import (
-    EventBus,
-    NotifierProtocol,
-    SubscriptionStateRepo,
-    TwitchClientProtocol,
-)
+from twitch_subs.domain.protocols import Clock, IdProvider
 
 
 class Watcher:
@@ -32,11 +31,15 @@ class Watcher:
         notifier: NotifierProtocol,
         state_repo: SubscriptionStateRepo,
         event_bus: EventBus,
+        clock: Clock,
+        id_provider: IdProvider,
     ) -> None:
         self.twitch = twitch
         self.notifier = notifier
         self.state_repo = state_repo
         self.event_bus = event_bus
+        self.clock = clock
+        self.id_provider = id_provider
 
     async def check_login(self, login: str) -> LoginStatus:
         user = await self.twitch.get_user_by_login(login)
@@ -59,6 +62,8 @@ class Watcher:
                 if curr_sub:
                     await self.event_bus.publish(
                         UserBecomeSubscribtable(
+                            id=self.id_provider.new_id(),
+                            occurred_at=self.clock.now(),
                             login=login,
                             current_state=curr,
                         )
@@ -66,12 +71,32 @@ class Watcher:
             since = (
                 prev.since
                 if prev and prev_sub and curr_sub
-                else (datetime.now(timezone.utc) if curr_sub else None)
+                else (self.clock.now() if curr_sub else None)
             )
-            updates.append(SubState(login=status.login, status=curr, since=since))
-            await self.event_bus.publish(OnceChecked(login=login, current_state=curr))
+            updates.append(
+                SubState(
+                    login=status.login,
+                    status=curr,
+                    since=since,
+                    updated_at=self.clock.now(),
+                )
+            )
+            await self.event_bus.publish(
+                OnceChecked(
+                    id=self.id_provider.new_id(),
+                    occurred_at=self.clock.now(),
+                    login=login,
+                    current_state=curr,
+                )
+            )
         self.state_repo.set_many(updates)
-        await self.event_bus.publish(LoopChecked(logins=logins))
+        await self.event_bus.publish(
+            LoopChecked(
+                id=self.id_provider.new_id(),
+                occurred_at=self.clock.now(),
+                logins=logins,
+            )
+        )
         return changed
 
     async def watch(
@@ -91,7 +116,12 @@ class Watcher:
                 except Exception as e:
                     logger.opt(exception=e).exception("Run once failed")
                     await self.event_bus.publish(
-                        LoopCheckFailed(logins=tuple(all_logins), error=str(e))
+                        LoopCheckFailed(
+                            id=self.id_provider.new_id(),
+                            occurred_at=self.clock.now(),
+                            logins=tuple(all_logins),
+                            error=str(e),
+                        )
                     )
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)

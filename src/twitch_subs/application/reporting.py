@@ -23,6 +23,7 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
 )
 from twitch_subs.domain.events import DayChanged, LoopChecked, LoopCheckFailed
+from twitch_subs.domain.protocols import Clock, IdProvider
 from twitch_subs.domain.models import BroadcasterType, LoginReportInfo
 
 
@@ -105,6 +106,8 @@ class DayChangeScheduler:
     """Schedule :class:`DayChanged` events using ``aiocron``."""
 
     event_bus: EventBus
+    clock: Clock
+    id_provider: IdProvider
     cron: str = "0 0 * * *"
     _cron_job: CronJob | None = None
     _crontab_factory: Callable[..., CronJob] = crontab
@@ -122,4 +125,9 @@ class DayChangeScheduler:
         self._cron_job = None
 
     async def _emit(self) -> None:
-        await self.event_bus.publish(DayChanged())
+        await self.event_bus.publish(
+            DayChanged(
+                id=self.id_provider.new_id(),
+                occurred_at=self.clock.now(),
+            )
+        )

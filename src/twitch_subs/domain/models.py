@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import InitVar, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 
 
@@ -61,7 +61,7 @@ class SubState:
     login: str
     status: BroadcasterType | bool
     since: datetime | None = None
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(kw_only=True)
     tier: InitVar[str | None] = None
     _tier_value: str | None = field(init=False, repr=False)
 
