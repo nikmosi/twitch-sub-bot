@@ -6,9 +6,16 @@ from typing import Any
 import pytest
 
 from twitch_subs.application.watchlist_service import WatchlistService
+from twitch_subs.domain.models import (
+    BroadcasterType,
+    LoginReportInfo,
+    LoginStatus,
+    UserRecord,
+)
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import (
     IDFilter,
+    TelegramNotifier,
     TelegramWatchlistBot,
 )
 
@@ -112,6 +119,94 @@ def test_id_filter_and_handlers(
     asyncio.run(bot._cmd_list(m_list))
     text = m_list.answers[0][0]
     assert "List" in text or text == "Watchlist is empty"
+
+
+def test_handle_list_with_users(tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    bot = TelegramWatchlistBot(StubBot(), "1", service)
+    bot._handle_add("foo")
+
+    result = bot._handle_list()
+
+    assert "foo" in result
+    assert "https://www.twitch.tv/foo" in result
+
+
+@pytest.mark.asyncio
+async def test_notifier_notify_report_sorts_and_formats() -> None:
+    bot = StubBot()
+    notifier = TelegramNotifier(bot, "chat")
+    states = [
+        LoginReportInfo("foo", BroadcasterType.PARTNER),
+        LoginReportInfo("bar", BroadcasterType.NONE),
+    ]
+
+    await notifier.notify_report(states, checks=5, errors=1)
+
+    assert bot.sent
+    message, kwargs = bot.sent[0]
+    assert "Checks: <b>5</b>" in message
+    assert "Errors: <b>1</b>" in message
+    assert message.index("bar") < message.index("foo")
+    assert kwargs["disable_notification"] is True
+
+
+@pytest.mark.asyncio
+async def test_notifier_notify_about_change_uses_display_name() -> None:
+    bot = StubBot()
+    notifier = TelegramNotifier(bot, "chat")
+    user = UserRecord(
+        id="1",
+        login="foo",
+        display_name="FooBar",
+        broadcaster_type=BroadcasterType.AFFILIATE,
+    )
+    status = LoginStatus("foo", BroadcasterType.NONE, user)
+
+    await notifier.notify_about_change(status, BroadcasterType.PARTNER)
+
+    assert bot.sent
+    message, _ = bot.sent[0]
+    assert "FooBar" in message
+    assert "partner" in message
+
+
+@pytest.mark.asyncio
+async def test_notifier_notify_start_and_stop() -> None:
+    bot = StubBot()
+    notifier = TelegramNotifier(bot, "chat")
+
+    await notifier.notify_about_start()
+    await notifier.notify_about_stop()
+
+    assert len(bot.sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_notifier_send_message_handles_errors() -> None:
+    bot = StubBot()
+    notifier = TelegramNotifier(bot, "chat")
+
+    bot.fail_next = True
+    await notifier.send_message("oops")
+
+    assert bot.fail_next is False
+
+
+def test_run_polling_uses_asyncio_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    service = make_service(tmp_path)
+    watch_bot = TelegramWatchlistBot(StubBot(), "1", service)
+    called: dict[str, object] = {}
+
+    def fake_run(coro) -> None:
+        called["coro"] = coro
+        coro.close()
+
+    monkeypatch.setattr("twitch_subs.infrastructure.telegram.asyncio.run", fake_run)
+
+    watch_bot.run_polling()
+
+    assert "coro" in called
 
 
 @pytest.mark.asyncio
