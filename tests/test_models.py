@@ -16,6 +16,12 @@ def test_login_report_info_accepts_enum_and_str() -> None:
     assert enum_info.broadcaster is BroadcasterType.PARTNER
 
 
+def test_login_report_info_none_defaults_to_none() -> None:
+    info = LoginReportInfo("bar", None)
+    assert info.broadcaster is BroadcasterType.NONE
+    assert info.tier is None
+
+
 @pytest.mark.parametrize(
     "raw_status, tier, expected_type, expected_tier",
     [
@@ -32,3 +38,9 @@ def test_sub_state_normalizes_inputs(
     assert state.status is expected_type
     assert state.tier == expected_tier
     assert state.is_subscribed is expected_type.is_subscribable()
+
+
+def test_sub_state_accepts_string_status() -> None:
+    state = SubState("foo", "partner")
+    assert state.status is BroadcasterType.PARTNER
+    assert state.tier == BroadcasterType.PARTNER.value

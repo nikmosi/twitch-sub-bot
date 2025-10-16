@@ -11,14 +11,14 @@ from typing import Any, Sequence
 import typer
 from loguru import logger
 
-from twitch_subs.application.ports import WatchlistRepository
+from twitch_subs.application.event_handlers import register_notification_handlers
+from twitch_subs.application.ports import EventBus, WatchlistRepository
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.domain.events import UserAdded, UserRemoved
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 
 from .config import Settings
 from .container import Container
-from .infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -53,12 +53,12 @@ async def run_watch(
     repo: WatchlistRepository,
     interval: int,
     stop: asyncio.Event,
-):
+) -> None:
     container.ensure_day_scheduler()
     await watcher.watch(WatchListLoginProvider(repo), interval, stop)
 
 
-async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
+async def run_bot(bot: Any, stop: asyncio.Event) -> None:
     """Run Telegram bot until *stop* is set."""
 
     task = asyncio.create_task(bot.run())
@@ -66,16 +66,6 @@ async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
     with contextlib.suppress(asyncio.CancelledError):
         await bot.stop()
         await task
-
-
-def _get_notifier(container: Container) -> TelegramNotifier | None:
-    """Return configured notifier when Telegram credentials are provided."""
-
-    token = container.settings.telegram_bot_token
-    chat_id = container.settings.telegram_chat_id
-    if not token or not chat_id:
-        return None
-    return container.notifier
 
 
 @state_app.command("get", help="Get stored state for LOGIN")
@@ -116,16 +106,22 @@ def watch(
     container = Container(settings)
     repo = container.watchlist_repo
     logins = repo.list()
+    event_bus = container.event_bus
+
+    notifier = container.notifier
+    register_notification_handlers(event_bus, notifier, container.sub_state_repo)
+
     watcher = container.build_watcher()
     bot = container.build_bot()
 
     tasks: list[asyncio.Task[Any]] = []
+    task_errors: list[BaseException] = []
 
     logger.info(
         "Starting watch for logins %s with interval %ss", ", ".join(logins), interval
     )
 
-    async def wait_stop():
+    async def wait_stop() -> None:
         timeout = 5000
         await stop.wait()
         logger.debug("initial timeout for main tasks")
@@ -134,10 +130,12 @@ def watch(
         for t in waiters:
             try:
                 await t
-            except TimeoutError as e:
-                logger.opt(exception=e).warning(f"{t} can't complete with {timeout} s.")
+            except TimeoutError as exc:  # pragma: no cover - defensive logging
+                logger.opt(exception=exc).warning(
+                    "%s can't complete with %s s.", t.get_name(), timeout
+                )
 
-    def shutdown():
+    def shutdown() -> None:
         stop.set()
 
     def main() -> int:
@@ -148,26 +146,41 @@ def watch(
             asyncio.set_event_loop(loop)
         loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
+        loop.run_until_complete(event_bus.start())
+
         bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
         watcher_task = loop.create_task(
             run_watch(container, watcher, repo, interval, stop), name="run_watch"
         )
 
-        tasks.append(bot_task)
-        tasks.append(watcher_task)
+        tasks.extend([bot_task, watcher_task])
+
+        def handle_task_result(task: asyncio.Task[Any]) -> None:
+            try:
+                exception = task.exception()
+            except asyncio.CancelledError:  # pragma: no cover - cancellation path
+                return
+            if exception is not None:
+                task_errors.append(exception)
+                stop.set()
+
+        for task in tasks:
+            task.add_done_callback(handle_task_result)
 
         exit_code = 0
         try:
             loop.run_until_complete(wait_stop())
             logger.debug("shutdown")
-        except Exception as e:
-            logger.opt(exception=e).exception("Worker crashed")
+            if task_errors:
+                exit_code = 1
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.opt(exception=exc).exception("Worker crashed")
             exit_code = 1
         finally:
             try:
                 loop.run_until_complete(container.aclose())
-            except Exception as e:  # pragma: no cover - defensive logging
-                logger.opt(exception=e).warning("Failed to close container cleanly")
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.opt(exception=exc).warning("Failed to close container cleanly")
             loop.close()
 
         return exit_code
@@ -178,14 +191,12 @@ def watch(
 @app.command("add", help="Add a Twitch username to the watchlist")
 def add(
     usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
+    notify: bool = typer.Option(True, "--notify", "-n", help="Publish notification event"),
 ) -> None:
     container = Container(Settings())
-    event_bus = None
-    should_notify = bool(notify and _get_notifier(container))
-    if should_notify:
-        event_bus = container.event_bus
+    bus: EventBus | None = container.event_bus if notify else None
     service = container.watchlist_service
+    pending_events: list[UserAdded] = []
     try:
         for batch in batched(usernames, n=10):
             for username in batch:
@@ -193,8 +204,10 @@ def add(
                     typer.echo(f"{username} already present")
                     continue
                 typer.echo(f"Added {username}")
-                if should_notify and event_bus is not None:
-                    asyncio.run(event_bus.publish(UserAdded(login=username)))
+                if notify and bus is not None:
+                    pending_events.append(UserAdded(login=username))
+        if pending_events and bus is not None:
+            asyncio.run(bus.publish(*pending_events))
     finally:
         asyncio.run(container.aclose())
 
@@ -224,27 +237,27 @@ def remove(
         "-q",
         help="Exit 0 even if username was absent",
     ),
-    notify: bool = typer.Option(True, "--notify", "-n", help="notify in telegram"),
+    notify: bool = typer.Option(True, "--notify", "-n", help="Publish notification event"),
 ) -> None:
     container = Container(Settings())
-    event_bus = None
-    should_notify = bool(notify and _get_notifier(container))
-    if should_notify:
-        event_bus = container.event_bus
+    bus: EventBus | None = container.event_bus if notify else None
     service = container.watchlist_service
+    pending_events: list[UserRemoved] = []
 
     try:
         for username in usernames:
             removed = service.remove(username)
             if removed:
                 typer.echo(f"Removed {username}")
-                if should_notify and event_bus is not None:
-                    asyncio.run(event_bus.publish(UserRemoved(login=username)))
+                if notify and bus is not None:
+                    pending_events.append(UserRemoved(login=username))
             else:
                 if quiet:
-                    return
+                    continue
                 typer.echo(f"{username} not found", err=True)
                 raise typer.Exit(1)
+        if pending_events and bus is not None:
+            asyncio.run(bus.publish(*pending_events))
     finally:
         asyncio.run(container.aclose())
 

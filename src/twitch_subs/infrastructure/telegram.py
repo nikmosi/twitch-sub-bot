@@ -14,6 +14,7 @@ from twitch_subs.application.ports import NotifierProtocol
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import (
     BroadcasterType,
+    LoginReportInfo,
     LoginStatus,
     SubState,
 )
@@ -48,7 +49,7 @@ class TelegramNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        states: Sequence[SubState],
+        states: Sequence[LoginReportInfo],
         checks: int,
         errors: int,
     ) -> None:
@@ -56,8 +57,8 @@ class TelegramNotifier(NotifierProtocol):
         text.append(f"Checks: <b>{checks}</b>")
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
-        for info in states:
-            broadcaster = info.status
+        for info in sorted(states, key=lambda item: item.login):
+            broadcaster = info.broadcaster
             text.append(
                 f"• <b>{broadcaster.value:>8}</b> "
                 f'<a href="https://www.twitch.tv/{info.login}">{info.login}</a>'

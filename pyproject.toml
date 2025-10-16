@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv>=1.1.1",
     "typer>=0.12.3",
     "aiogram>=3.22.0",
+    "aio-pika>=9.4.1",
     "sqlalchemy>=2.0",
     "aiolimiter>=1.2.1",
     "aiocron>=1.8",
