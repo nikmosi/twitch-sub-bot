@@ -2,7 +2,11 @@ from collections.abc import Iterable
 
 import pytest
 
-from twitch_subs.application.reporting import DailyReportCollector, DayChangeScheduler
+from twitch_subs.application.reporting import (
+    DailyReportCollector,
+    DayChangeScheduler,
+    crontab,
+)
 from twitch_subs.application.ports import EventBus, NotifierProtocol, SubscriptionStateRepo
 from twitch_subs.domain.events import DayChanged, LoopCheckFailed, LoopChecked
 from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, SubState
@@ -125,3 +129,45 @@ async def test_scheduler_emits_day_changed() -> None:
 
     scheduler.stop()
     assert scheduler._cron_job is None
+
+
+def test_scheduler_idempotent_start_and_stop() -> None:
+    bus = StubEventBus()
+
+    scheduler = DayChangeScheduler(bus)
+    scheduler._crontab_factory = lambda *args, **kwargs: StubCron(kwargs.get("func"))
+
+    scheduler.start()
+    first = scheduler._cron_job
+    scheduler.start()
+    assert scheduler._cron_job is first
+
+    scheduler.stop()
+    scheduler.stop()
+    assert scheduler._cron_job is None
+
+
+def test_crontab_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_crontab(spec, func, args, kwargs, start, loop, tz):
+        captured.update(
+            {
+                "spec": spec,
+                "func": func,
+                "args": args,
+                "kwargs": kwargs,
+                "start": start,
+                "loop": loop,
+                "tz": tz,
+            }
+        )
+        return "job"
+
+    monkeypatch.setattr("twitch_subs.application.reporting.aiocron.crontab", fake_crontab)
+
+    job = crontab("*/10 * * * *", func=None, start=False, args=(1,), kwargs={"x": 2})
+
+    assert job == "job"
+    assert captured["spec"] == "*/10 * * * *"
+    assert captured["start"] is False
