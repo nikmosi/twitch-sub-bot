@@ -9,7 +9,7 @@ import logging
 from collections import OrderedDict, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Callable, DefaultDict, Dict, Iterable, TypeVar, cast
+from typing import Any, Callable, DefaultDict, Dict, TypeVar, cast
 
 import aio_pika
 from aio_pika import (
@@ -27,8 +27,8 @@ from twitch_subs.application.ports import EventBus, Handler
 from twitch_subs.domain.events import (
     DayChanged,
     DomainEvent,
-    LoopCheckFailed,
     LoopChecked,
+    LoopCheckFailed,
     OnceChecked,
     UserAdded,
     UserBecomeSubscribtable,
@@ -163,7 +163,9 @@ class RabbitMQEventBus(EventBus):
         self._queue_name = queue_name
         self._prefetch_count = prefetch_count
         self._dedup_capacity = dedup_capacity
-        self._handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = defaultdict(list)
+        self._handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = (
+            defaultdict(list)
+        )
         self._connection: RobustConnection | None = None
         self._publish_channel: RobustChannel | None = None
         self._consume_channel: RobustChannel | None = None
@@ -273,7 +275,9 @@ class RabbitMQEventBus(EventBus):
         descriptor = _EVENT_REGISTRY.get(event_type)
         if descriptor is None or self._queue is None or self._consume_exchange is None:
             return
-        await self._queue.bind(self._consume_exchange, routing_key=descriptor.routing_key)
+        await self._queue.bind(
+            self._consume_exchange, routing_key=descriptor.routing_key
+        )
 
     async def _on_message(self, message: AbstractIncomingMessage) -> None:
         async with message.process(requeue=not self._closing):
