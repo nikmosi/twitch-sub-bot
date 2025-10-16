@@ -118,7 +118,7 @@ def watch(
     task_errors: list[BaseException] = []
 
     logger.info(
-        "Starting watch for logins %s with interval %ss", ", ".join(logins), interval
+        f"Starting watch for logins {', '.join(logins)} with interval {interval}"
     )
 
     async def wait_stop() -> None:
