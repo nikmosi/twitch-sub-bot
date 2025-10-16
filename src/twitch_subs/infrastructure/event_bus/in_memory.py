@@ -24,4 +24,4 @@ class InMemoryEventBus(EventBus):
 
     @override
     def subscribe(self, event_type: type[T], handler: Handler[T]) -> None:
-        self.mem[event_type].append(cast(Handler[Any], handler))
+        self.mem[event_type].append(handler)
