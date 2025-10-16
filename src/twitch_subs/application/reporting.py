@@ -9,13 +9,14 @@ from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 # pyright: reportMissingTypeStubs=false
 import aiocron
 
+from twitch_subs.application.error import RepoCantFintLoginError
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
     SubscriptionStateRepo,
 )
 from twitch_subs.domain.events import DayChanged, LoopChecked, LoopCheckFailed
-from twitch_subs.domain.models import BroadcasterType, LoginReportInfo
+from twitch_subs.domain.models import LoginReportInfo
 
 
 @dataclass(slots=True)
@@ -49,11 +50,9 @@ class DailyReportCollector:
         report: list[LoginReportInfo] = []
         for login in sorted(logins):
             state = self.state_repo.get_sub_state(login)
-            if state and state.is_subscribed:
-                raw_tier: str | BroadcasterType | None = state.tier or state.status
-            else:
-                raw_tier = BroadcasterType.NONE
-            report.append(LoginReportInfo(login, raw_tier))
+            if state is None:
+                raise RepoCantFintLoginError(login=login)
+            report.append(LoginReportInfo(login, state.status))
         return report
 
     def _reset(self) -> None:
