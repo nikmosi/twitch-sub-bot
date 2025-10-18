@@ -9,19 +9,21 @@ import logging
 from collections import OrderedDict, defaultdict
 from dataclasses import asdict, dataclass
 from datetime import datetime
-from typing import Any, Callable, DefaultDict, Dict, TypeVar, cast
+from typing import Any, Callable, DefaultDict, Dict, Iterable, TypeVar, cast
 
 import aio_pika
 from aio_pika import (
     DeliveryMode,
-    Exchange,
     ExchangeType,
     Message,
-    RobustChannel,
-    RobustConnection,
-    RobustQueue,
 )
-from aio_pika.abc import AbstractIncomingMessage
+from aio_pika.abc import (
+    AbstractChannel,
+    AbstractExchange,
+    AbstractIncomingMessage,
+    AbstractQueue,
+    AbstractRobustConnection,
+)
 
 from twitch_subs.application.ports import EventBus, Handler
 from twitch_subs.domain.events import (
@@ -53,8 +55,9 @@ class EventDescriptor:
 def _enum_to_value(value: Any) -> Any:
     if isinstance(value, BroadcasterType):
         return value.value
-    if isinstance(value, (list, tuple)):
-        return list(value)
+    if isinstance(value, (list, tuple, set)):
+        it = cast(Iterable[Any], value)
+        return [_enum_to_value(v) for v in it]
     return value
 
 
@@ -163,18 +166,23 @@ class RabbitMQEventBus(EventBus):
         self._queue_name = queue_name
         self._prefetch_count = prefetch_count
         self._dedup_capacity = dedup_capacity
+
         self._handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = (
             defaultdict(list)
         )
-        self._connection: RobustConnection | None = None
-        self._publish_channel: RobustChannel | None = None
-        self._consume_channel: RobustChannel | None = None
-        self._exchange: Exchange | None = None
-        self._consume_exchange: Exchange | None = None
-        self._queue: RobustQueue | None = None
+
+        self._connection: AbstractRobustConnection | None = None
+        self._publish_channel: AbstractChannel | None = None
+        self._consume_channel: AbstractChannel | None = None
+        self._exchange: AbstractExchange | None = None
+        self._consume_exchange: AbstractExchange | None = None
+        self._queue: AbstractQueue | None = None
         self._consumer_tag: str | None = None
+
         self._connection_lock = asyncio.Lock()
         self._closing = False
+
+        # LRU для защиты от дубликатов по event_id
         self._deduplication: OrderedDict[str, None] = OrderedDict()
 
     def subscribe(self, event_type: type[T], handler: Handler[T]) -> None:
@@ -182,7 +190,7 @@ class RabbitMQEventBus(EventBus):
         if self._queue is not None:
             try:
                 loop = asyncio.get_running_loop()
-            except RuntimeError:  # pragma: no cover - no running loop
+            except RuntimeError:  # нет активного цикла — лениво добиндимся в start()
                 return
             loop.create_task(self._bind_event(event_type))
 
@@ -192,7 +200,11 @@ class RabbitMQEventBus(EventBus):
         exchange = await self._get_publish_exchange()
         for event in events:
             descriptor = _EVENT_REGISTRY[type(event)]
-            body = json.dumps(_serialize_event(event)).encode("utf-8")
+            body = json.dumps(
+                _serialize_event(event),
+                ensure_ascii=False,
+                separators=(",", ":"),
+            ).encode("utf-8")
             message = Message(
                 body=body,
                 headers={"event_id": event.id},
@@ -210,10 +222,12 @@ class RabbitMQEventBus(EventBus):
 
     async def stop(self) -> None:
         self._closing = True
+
         if self._queue is not None and self._consumer_tag is not None:
-            with contextlib.suppress(Exception):  # pragma: no cover - cleanup
+            with contextlib.suppress(Exception):
                 await self._queue.cancel(self._consumer_tag)
         self._consumer_tag = None
+
         if self._publish_channel is not None:
             with contextlib.suppress(Exception):
                 await self._publish_channel.close()
@@ -223,6 +237,7 @@ class RabbitMQEventBus(EventBus):
         if self._connection is not None:
             with contextlib.suppress(Exception):
                 await self._connection.close()
+
         self._queue = None
         self._exchange = None
         self._consume_exchange = None
@@ -235,19 +250,24 @@ class RabbitMQEventBus(EventBus):
         async with self._connection_lock:
             if self._connection is None or self._connection.is_closed:
                 self._connection = await aio_pika.connect_robust(self._url)
+                # сбросить кеши привязанные к соединению
                 self._publish_channel = None
                 self._consume_channel = None
                 self._exchange = None
                 self._consume_exchange = None
                 self._queue = None
 
-    async def _get_publish_exchange(self) -> aio_pika.Exchange:
+    async def _get_publish_exchange(self) -> AbstractExchange:
         await self._ensure_connection()
         if self._connection is None:
             raise RuntimeError("Failed to establish RabbitMQ connection")
+
         if self._publish_channel is None or self._publish_channel.is_closed:
             self._publish_channel = await self._connection.channel()
-        if self._exchange is None or self._exchange.is_closed:
+            # канал сменился → обменник нужно пересоздать
+            self._exchange = None
+
+        if self._exchange is None:
             self._exchange = await self._publish_channel.declare_exchange(
                 self._exchange_name, ExchangeType.TOPIC, durable=True
             )
@@ -256,14 +276,20 @@ class RabbitMQEventBus(EventBus):
     async def _ensure_consumer(self) -> None:
         if self._connection is None:
             raise RuntimeError("RabbitMQ connection is not initialised")
+
         if self._consume_channel is None or self._consume_channel.is_closed:
             self._consume_channel = await self._connection.channel()
             await self._consume_channel.set_qos(prefetch_count=self._prefetch_count)
-        if self._consume_exchange is None or self._consume_exchange.is_closed:
+            # канал сменился → нужно пересоздать зависимости
+            self._consume_exchange = None
+            self._queue = None
+
+        if self._consume_exchange is None:
             self._consume_exchange = await self._consume_channel.declare_exchange(
                 self._exchange_name, ExchangeType.TOPIC, durable=True
             )
-        if self._queue is None or self._queue.declaration_result is None:
+
+        if self._queue is None:
             self._queue = await self._consume_channel.declare_queue(
                 name=self._queue_name,
                 durable=self._queue_name is not None,
@@ -275,6 +301,7 @@ class RabbitMQEventBus(EventBus):
         descriptor = _EVENT_REGISTRY.get(event_type)
         if descriptor is None or self._queue is None or self._consume_exchange is None:
             return
+        # идемпотентно на стороне брокера
         await self._queue.bind(
             self._consume_exchange, routing_key=descriptor.routing_key
         )
@@ -282,17 +309,33 @@ class RabbitMQEventBus(EventBus):
     async def _on_message(self, message: AbstractIncomingMessage) -> None:
         async with message.process(requeue=not self._closing):
             data = json.loads(message.body)
-            event_id = message.headers.get("event_id") or data.get("id")
-            if isinstance(event_id, bytes):
-                event_id = event_id.decode("utf-8")
+            event_id: str | None = None
+            header_id = message.headers.get("event_id")
+            if isinstance(header_id, bytes):
+                event_id = header_id.decode("utf-8")
+            elif header_id is not None:
+                event_id = str(header_id)
+            else:
+                payload_id = data.get("id")
+                if isinstance(payload_id, bytes):
+                    event_id = payload_id.decode("utf-8")
+                elif payload_id is not None:
+                    event_id = str(payload_id)
+
             if event_id and event_id in self._deduplication:
                 return
+
             event = _deserialize_event(data)
             await self._dispatch(event)
+
             if event_id:
-                self._deduplication[event_id] = None
-                if len(self._deduplication) > self._dedup_capacity:
-                    self._deduplication.popitem(last=False)
+                self._remember_event_id(event_id)
+
+    def _remember_event_id(self, event_id: str) -> None:
+        # LRU: вставить в конец и при переполнении удалить самый старый
+        self._deduplication[event_id] = None
+        if len(self._deduplication) > self._dedup_capacity:
+            self._deduplication.popitem(last=False)
 
     async def _dispatch(self, event: DomainEvent) -> None:
         handlers: list[Handler[Any]] = []
