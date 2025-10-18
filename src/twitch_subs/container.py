@@ -13,7 +13,7 @@ from sqlalchemy import create_engine, text
 from twitch_subs.application.ports import EventBus
 from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
-from twitch_subs.infra.events import InMemoryEventBus, RabbitMQEventBus
+from twitch_subs.infrastructure.event_bus import InMemoryEventBus, RabbitMQEventBus
 
 from .application.watcher import Watcher
 from .config import Settings
