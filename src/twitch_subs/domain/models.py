@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import field
 from datetime import datetime, timezone
 from enum import Enum
+
+from pydantic.dataclasses import dataclass
 
 
 class BroadcasterType(str, Enum):
