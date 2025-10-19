@@ -6,19 +6,27 @@ import re
 import signal
 import sys
 from itertools import batched
-from typing import Any, Sequence
+from typing import Any, Awaitable, Sequence
 
 import typer
+from dependency_injector.wiring import Provide, inject
 from loguru import logger
 
 from twitch_subs.application.event_handlers import register_notification_handlers
-from twitch_subs.application.ports import EventBus, WatchlistRepository
+from twitch_subs.application.ports import (
+    EventBus,
+    NotifierProtocol,
+    SubscriptionStateRepo,
+    WatchlistRepository,
+)
 from twitch_subs.application.watcher import Watcher
+from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserAdded, UserRemoved
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
+from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
 
 from .config import Settings
-from .container import Container
+from .container import AppContainer, build_container
 
 app = typer.Typer(
     name="twitch-subs-checker",
@@ -33,6 +41,14 @@ logger.add(sys.stderr, level="TRACE")
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,25}$", re.ASCII)
 
 
+async def entry_point(func: Awaitable[int]) -> int:
+    settings = Settings()
+    container = await build_container(settings)
+    container.wire(modules=[__name__])
+
+    return await func
+
+
 def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     """Validate *value* as a Twitch username or exit with code 2."""
     for value in names:
@@ -42,19 +58,12 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     return names
 
 
-@app.callback()
-def root() -> None:
-    """Root command for twitch-subs-checker."""
-
-
 async def run_watch(
-    container: Container,
     watcher: Watcher,
     repo: WatchlistRepository,
     interval: int,
     stop: asyncio.Event,
 ) -> None:
-    container.ensure_day_scheduler()
     await watcher.watch(WatchListLoginProvider(repo), interval, stop)
 
 
@@ -68,33 +77,90 @@ async def run_bot(bot: Any, stop: asyncio.Event) -> None:
         await task
 
 
-@state_app.command("get", help="Get stored state for LOGIN")
-def state_get(login: str) -> None:
-    container = Container(Settings())
-    try:
-        repo = container.sub_state_repo
-        state = repo.get_sub_state(login)
-        if state is None:
-            typer.echo("not found", err=True)
+@inject
+async def _add(
+    usernames: list[str],
+    notify: bool,
+    bus: EventBus = Provide[AppContainer.event_bus],
+    service: WatchlistService = Provide[AppContainer.watchlist_service],
+) -> int:
+    pending_events: list[UserAdded] = []
+
+    for batch in batched(usernames, n=10):
+        for username in batch:
+            if not service.add(username):
+                typer.echo(f"{username} already present")
+                continue
+            typer.echo(f"Added {username}")
+            if notify:
+                pending_events.append(UserAdded(login=username))
+    if pending_events:
+        await bus.publish(*pending_events)
+    return 0
+
+
+@inject
+async def _list_cmd(
+    repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
+) -> int:
+    users = repo.list()
+    if not users:
+        typer.echo("Watchlist is empty. Use 'add' to add usernames.")
+        raise typer.Exit(0)
+    for name in users:
+        typer.echo(name)
+    return 0
+
+
+@inject
+async def _remove(
+    usernames: list[str],
+    quiet: bool,
+    notify: bool,
+    bus: EventBus = Provide[AppContainer.event_bus],
+    service: WatchlistService = Provide[AppContainer.watchlist_service],
+) -> int:
+    pending_events: list[UserRemoved] = []
+
+    for username in usernames:
+        removed = service.remove(username)
+        if removed:
+            typer.echo(f"Removed {username}")
+            if notify:
+                pending_events.append(UserRemoved(login=username))
+        else:
+            if quiet:
+                continue
+            typer.echo(f"{username} not found", err=True)
             raise typer.Exit(1)
-        typer.echo(str(state))
-    finally:
-        asyncio.run(container.aclose())
+    if pending_events:
+        await bus.publish(*pending_events)
+    return 0
 
 
-@state_app.command("list", help="List all stored subscription states")
-def state_list() -> None:
-    container = Container(Settings())
-    try:
-        repo = container.sub_state_repo
-        rows = repo.list_all()
-        if not rows:
-            typer.echo("No subscription state found")
-            raise typer.Exit(0)
-        for row in rows:
-            typer.echo(str(row))
-    finally:
-        asyncio.run(container.aclose())
+@inject
+async def _state_get(
+    login: str, repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo]
+) -> int:
+    state = repo.get_sub_state(login)
+    if state is None:
+        typer.echo("not found", err=True)
+        raise typer.Exit(1)
+    typer.echo(str(state))
+    return 0
+
+
+@inject
+async def _state_list(
+    repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
+) -> int:
+    rows = repo.list_all()
+    if not rows:
+        typer.echo("No subscription state found")
+        raise typer.Exit(0)
+    for row in rows:
+        typer.echo(str(row))
+    return 0
 
 
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
@@ -102,24 +168,9 @@ def watch(
     interval: int = typer.Option(300, "--interval", help="Poll interval, seconds"),
 ) -> None:
     stop = asyncio.Event()
-    settings = Settings()
-    container = Container(settings)
-    repo = container.watchlist_repo
-    logins = repo.list()
-    event_bus = container.event_bus
-
-    notifier = container.notifier
-    register_notification_handlers(event_bus, notifier, container.sub_state_repo)
-
-    watcher = container.build_watcher()
-    bot = container.build_bot()
 
     tasks: list[asyncio.Task[Any]] = []
     task_errors: list[BaseException] = []
-
-    logger.info(
-        f"Starting watch for logins {', '.join(logins)} with interval {interval}"
-    )
 
     async def wait_stop() -> None:
         timeout = 5000
@@ -138,19 +189,29 @@ def watch(
     def shutdown() -> None:
         stop.set()
 
-    def main() -> int:
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
+    @inject
+    async def main(
+        repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
+        event_bus: EventBus = Provide[AppContainer.event_bus],
+        notifier: NotifierProtocol = Provide[AppContainer.notifier],
+        sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
+        watcher: Watcher = Provide[AppContainer.watcher],
+        bot: TelegramWatchlistBot = Provide[AppContainer.bot_app],
+    ) -> int:
+        logins = repo.list()
 
-        loop.run_until_complete(event_bus.start())
+        register_notification_handlers(event_bus, notifier, sub_state_repo)
+
+        logger.info(
+            f"Starting watch for logins {', '.join(logins)} with interval {interval}"
+        )
+
+        loop = asyncio.get_event_loop()
+        loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
         bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
         watcher_task = loop.create_task(
-            run_watch(container, watcher, repo, interval, stop), name="run_watch"
+            run_watch(watcher, repo, interval, stop), name="run_watch"
         )
 
         tasks.extend([bot_task, watcher_task])
@@ -169,100 +230,16 @@ def watch(
 
         exit_code = 0
         try:
-            loop.run_until_complete(wait_stop())
+            await wait_stop()
             logger.debug("shutdown")
             if task_errors:
                 exit_code = 1
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.opt(exception=exc).exception("Worker crashed")
             exit_code = 1
-        finally:
-            try:
-                loop.run_until_complete(container.aclose())
-            except Exception as exc:  # pragma: no cover - defensive logging
-                logger.opt(exception=exc).warning("Failed to close container cleanly")
-            loop.close()
-
         return exit_code
 
-    raise typer.Exit(main())
-
-
-async def _add(
-    usernames: list[str],
-    notify: bool,
-) -> None:
-    container = Container(Settings())
-    bus: EventBus | None = container.event_bus if notify else None
-    service = container.watchlist_service
-    pending_events: list[UserAdded] = []
-    try:
-        for batch in batched(usernames, n=10):
-            for username in batch:
-                if not service.add(username):
-                    typer.echo(f"{username} already present")
-                    continue
-                typer.echo(f"Added {username}")
-                if notify and bus is not None:
-                    pending_events.append(UserAdded(login=username))
-        if pending_events and bus is not None:
-            await bus.publish(*pending_events)
-    finally:
-        await container.aclose()
-
-
-@app.command("add", help="Add a Twitch username to the watchlist")
-def add(
-    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
-    notify: bool = typer.Option(
-        True, "--notify", "-n", help="Publish notification event"
-    ),
-) -> None:
-    return asyncio.run(_add(usernames, notify))
-
-
-@app.command("list", help="List Twitch usernames in watchlist")
-def list_cmd() -> None:
-    container = Container(Settings())
-    repo = container.watchlist_repo
-
-    try:
-        users = repo.list()
-        if not users:
-            typer.echo("Watchlist is empty. Use 'add' to add usernames.")
-            raise typer.Exit(0)
-        for name in users:
-            typer.echo(name)
-    finally:
-        asyncio.run(container.aclose())
-
-
-async def _remove(
-    usernames: list[str],
-    quiet: bool,
-    notify: bool,
-) -> None:
-    container = Container(Settings())
-    bus: EventBus | None = container.event_bus if notify else None
-    service = container.watchlist_service
-    pending_events: list[UserRemoved] = []
-
-    try:
-        for username in usernames:
-            removed = service.remove(username)
-            if removed:
-                typer.echo(f"Removed {username}")
-                if notify and bus is not None:
-                    pending_events.append(UserRemoved(login=username))
-            else:
-                if quiet:
-                    continue
-                typer.echo(f"{username} not found", err=True)
-                raise typer.Exit(1)
-        if pending_events and bus is not None:
-            await bus.publish(*pending_events)
-    finally:
-        await container.aclose()
+    raise typer.Exit(asyncio.run(entry_point(main())))
 
 
 @app.command("remove", help="Remove a Twitch username from the watchlist")
@@ -277,8 +254,38 @@ def remove(
     notify: bool = typer.Option(
         True, "--notify", "-n", help="Publish notification event"
     ),
-) -> None:
-    return asyncio.run(_remove(usernames, quiet, notify))
+) -> int:
+    return asyncio.run(entry_point(_remove(usernames, quiet, notify)))
+
+
+@app.command("add", help="Add a Twitch username to the watchlist")
+def add(
+    usernames: list[str] = typer.Argument(..., callback=validate_usernames),
+    notify: bool = typer.Option(
+        True, "--notify", "-n", help="Publish notification event"
+    ),
+) -> int:
+    return asyncio.run(entry_point(_add(usernames, notify)))
+
+
+@app.command("list", help="List Twitch usernames in watchlist")
+def list_cmd() -> int:
+    return asyncio.run(entry_point(_list_cmd()))
+
+
+@state_app.command("get", help="Get stored state for LOGIN")
+def state_get(login: str) -> int:
+    return asyncio.run(entry_point(_state_get(login=login)))
+
+
+@state_app.command("list", help="List all stored subscription states")
+def state_list() -> int:
+    return asyncio.run(entry_point(_state_list()))
+
+
+@app.callback()
+def root() -> None:
+    """Root command for twitch-subs-checker."""
 
 
 def main() -> None:  # pragma: no cover - CLI entry point
