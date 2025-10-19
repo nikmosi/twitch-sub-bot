@@ -1,7 +1,8 @@
 import uuid
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from twitch_subs.domain.models import BroadcasterType
 
@@ -14,48 +15,48 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class DomainEvent:
-    id: str = field(default_factory=_new_id)
-    occurred_at: datetime = field(default_factory=_utcnow)
+class DomainEvent(BaseModel):
+    id: str = Field(default_factory=_new_id)
+    occurred_at: datetime = Field(default_factory=_utcnow)
 
-    def name(self) -> str:
-        return type(self).__name__
+    @classmethod
+    def name(cls) -> str:
+        return cls.__name__
+
+    model_config = ConfigDict(
+        frozen=True,
+        # use_enum_values=True,
+        ser_json_timedelta="float",  # typos: ignore
+        extra="forbid",
+    )
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class UserBecomeSubscribtable(DomainEvent):
     login: str
     current_state: BroadcasterType
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class LoopChecked(DomainEvent):
     logins: Sequence[str]
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class LoopCheckFailed(DomainEvent):
     logins: Sequence[str]
     error: str
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class OnceChecked(DomainEvent):
     login: str
     current_state: BroadcasterType
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class UserAdded(DomainEvent):
     login: str
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class UserRemoved(DomainEvent):
     login: str
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
 class DayChanged(DomainEvent):
     pass
