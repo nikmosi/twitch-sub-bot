@@ -85,3 +85,5 @@ class SubscriptionStateRepo(Protocol):
     def upsert_sub_state(self, state: SubState) -> None: ...  # pragma: no cover
 
     def set_many(self, states: Iterable[SubState]) -> None: ...  # pragma: no cover
+
+    def list_all(self) -> list[SubState]: ...  # pragma: no cover
