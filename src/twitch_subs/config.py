@@ -21,9 +21,7 @@ class Settings(BaseSettings):
     rabbitmq_queue: str | None = Field(
         default="twitch_subs.watcher", validation_alias="RABBITMQ_QUEUE"
     )
-    rabbitmq_prefetch: int = Field(
-        default=10, validation_alias="RABBITMQ_PREFETCH"
-    )
+    rabbitmq_prefetch: int = Field(default=10, validation_alias="RABBITMQ_PREFETCH")
 
     @field_validator("database_echo", mode="before")
     @classmethod
@@ -33,3 +31,5 @@ class Settings(BaseSettings):
         return v
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    task_timeout: int = 5

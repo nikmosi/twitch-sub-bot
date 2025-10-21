@@ -67,7 +67,7 @@ async def run_watch(
     await watcher.watch(WatchListLoginProvider(repo), interval, stop)
 
 
-async def run_bot(bot: Any, stop: asyncio.Event) -> None:
+async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
     """Run Telegram bot until *stop* is set."""
 
     task = asyncio.create_task(bot.run())
@@ -172,8 +172,7 @@ def watch(
     tasks: list[asyncio.Task[Any]] = []
     task_errors: list[BaseException] = []
 
-    async def wait_stop() -> None:
-        timeout = 5000
+    async def wait_stop(timeout: int) -> None:
         await stop.wait()
         logger.debug("initial timeout for main tasks")
 
@@ -191,6 +190,7 @@ def watch(
 
     @inject
     async def main(
+        settings: Settings = Provide[AppContainer.config],
         repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
         event_bus: EventBus = Provide[AppContainer.event_bus],
         notifier: NotifierProtocol = Provide[AppContainer.notifier],
@@ -230,7 +230,7 @@ def watch(
 
         exit_code = 0
         try:
-            await wait_stop()
+            await wait_stop(settings.task_timeout)
             logger.debug("shutdown")
             if task_errors:
                 exit_code = 1
