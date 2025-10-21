@@ -29,9 +29,3 @@ class InMemoryEventBus(EventBus):
 
     def subscribe(self, event_type: type[T], handler: Handler[T]) -> None:
         self._handlers[event_type].append(handler)
-
-    async def start(self) -> None:  # pragma: no cover - trivial no-op
-        return None
-
-    async def stop(self) -> None:  # pragma: no cover - trivial no-op
-        return None

@@ -22,10 +22,6 @@ class EventBus(Protocol):
 
     def subscribe(self, event_type: type[DomainEvent], handler: Handler[E]) -> None: ...
 
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
-
 
 class TwitchClientProtocol(Protocol):
     async def get_user_by_login(

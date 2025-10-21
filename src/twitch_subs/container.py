@@ -87,13 +87,11 @@ async def _event_bus_resource(
             queue_name=queue_name,
             prefetch_count=prefetch_count,
         )
+        async with bus:
+            yield bus
     else:
-        bus = InMemoryEventBus()
-    await bus.start()
-    try:
-        yield bus
-    finally:
-        await bus.stop()
+        yield InMemoryEventBus()
+        return
 
 
 @asynccontextmanager

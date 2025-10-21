@@ -7,6 +7,7 @@ import json
 import re
 from collections import OrderedDict, defaultdict
 from datetime import datetime
+from types import TracebackType
 from typing import Any, Awaitable, DefaultDict, Dict, TypeVar, cast
 
 import aio_pika
@@ -65,12 +66,14 @@ class RabbitMQEventBus(EventBus):
         queue_name: str | None = None,
         prefetch_count: int = 10,
         dedup_capacity: int = 1024,
+        stop_timeout: int = 5,
     ) -> None:
         self._url = url
         self._exchange_name = exchange
         self._queue_name = queue_name
         self._prefetch_count = prefetch_count
         self._dedup_capacity = dedup_capacity
+        self._stop_timeout = stop_timeout
 
         self._handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = (
             defaultdict(list)
@@ -117,7 +120,7 @@ class RabbitMQEventBus(EventBus):
             routing_key = _routing_key_from_type(type(event))
             await exchange.publish(message, routing_key=routing_key)
 
-    async def start(self) -> None:
+    async def __aenter__(self) -> None:
         await self._ensure_connection()
         await self._ensure_consumer()
         for event_type in list(self._handlers.keys()):
@@ -136,9 +139,15 @@ class RabbitMQEventBus(EventBus):
 
         return asyncio.create_task(runner())
 
-    async def stop(self, *, timeout: float = 5.0) -> None:
+    async def __aexit__(
+        self, exc_type: type[Exception] | None, exc: BaseException, tb: TracebackType
+    ) -> None:
         self._closing = True
         tasks: list[asyncio.Task[None]] = []
+
+        if exc_type:
+            logger.opt(exception=exc).error("occur exception in exit event bus.")
+            logger.opt(exception=exc).trace(tb)
 
         if self._queue is not None and self._consumer_tag is not None:
             tasks.append(
@@ -159,7 +168,7 @@ class RabbitMQEventBus(EventBus):
 
         if tasks:
             done, pending = await asyncio.wait(
-                tasks, timeout=timeout, return_when=asyncio.ALL_COMPLETED
+                tasks, timeout=self._stop_timeout, return_when=asyncio.ALL_COMPLETED
             )
             # обработать неожиданные ошибки (если runner их не проглотил)
             for t in done:
@@ -176,7 +185,9 @@ class RabbitMQEventBus(EventBus):
                 for t in pending:
                     t.cancel()
                 # ждём повторно после отмены
-                _, still_pending = await asyncio.wait(pending, timeout=timeout)
+                _, still_pending = await asyncio.wait(
+                    pending, timeout=self._stop_timeout
+                )
                 if still_pending:
                     LOGGER.warning(
                         f"stop: {len(still_pending)} close task(s) stuck after cancel"
