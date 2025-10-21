@@ -20,12 +20,13 @@ from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.event_bus import InMemoryEventBus, RabbitMQEventBus
+from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
     SqliteWatchlistRepository,
     metadata,
 )
-from twitch_subs.infrastructure.telegram import TelegramNotifier, TelegramWatchlistBot
+from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
 from twitch_subs.infrastructure.twitch import TwitchClient
 
 from .application.watcher import Watcher
