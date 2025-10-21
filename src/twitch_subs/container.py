@@ -119,13 +119,14 @@ async def _day_scheduler_resource(
 class AppContainer(containers.DeclarativeContainer):
     """Dependency Injector container for the app."""
 
-    config = providers.Configuration()
+    settings = providers.Singleton(Settings)
+    container_config = providers.Configuration()
 
     # Engine (sync resource)
     engine = providers.Resource(
         _engine_resource,
-        database_url=config.database_url,
-        echo=config.database_echo.as_bool(),
+        database_url=container_config.database_url,
+        echo=container_config.database_echo.as_bool(),
     )
 
     # Repositories
@@ -139,30 +140,30 @@ class AppContainer(containers.DeclarativeContainer):
     # Twitch
     twitch_creds = providers.Singleton(
         TwitchAppCreds,
-        client_id=config.twitch_client_id,
-        client_secret=config.twitch_client_secret,
+        client_id=container_config.twitch_client_id,
+        client_secret=container_config.twitch_client_secret,
     )
     twitch_client = providers.Resource(_twitch_client_resource, creds=twitch_creds)
 
     # Telegram
     tg_session = providers.Resource(_aiohttp_session_resource)
     telegram_bot = providers.Resource(
-        _bot_resource, token=config.telegram_bot_token, session=tg_session
+        _bot_resource, token=container_config.telegram_bot_token, session=tg_session
     )
     notifier: providers.Singleton[NotifierProtocol] = providers.Singleton(
-        TelegramNotifier, bot=telegram_bot, chat_id=config.telegram_chat_id
+        TelegramNotifier, bot=telegram_bot, chat_id=container_config.telegram_chat_id
     )
     # Event bus (async resource to ensure graceful stop)
     event_bus = providers.Resource(
         _event_bus_resource,
-        rabbitmq_url=config.rabbitmq_url.optional(),
-        exchange=config.rabbitmq_exchange,
-        queue_name=config.rabbitmq_queue,
-        prefetch_count=config.rabbitmq_prefetch.as_int(),
+        rabbitmq_url=container_config.rabbitmq_url.optional(),
+        exchange=container_config.rabbitmq_exchange,
+        queue_name=container_config.rabbitmq_queue,
+        prefetch_count=container_config.rabbitmq_prefetch.as_int(),
     )
     # Day change scheduler (autostart on init_resources, stop on shutdown_resources)
     day_scheduler = providers.Resource(
-        _day_scheduler_resource, bus=event_bus, cron=config.report_cron
+        _day_scheduler_resource, bus=event_bus, cron=container_config.report_cron
     )
 
     # Application actors
@@ -177,7 +178,7 @@ class AppContainer(containers.DeclarativeContainer):
     bot_app = providers.Factory(
         TelegramWatchlistBot,
         bot=telegram_bot,
-        chat_id=config.telegram_chat_id,
+        chat_id=container_config.telegram_chat_id,
         service=watchlist_service,
     )
 
@@ -188,7 +189,7 @@ class AppContainer(containers.DeclarativeContainer):
 async def build_container(settings: Settings) -> AppContainer:
     """Create container, load config, init async resources."""
     container = AppContainer()
-    container.config.from_pydantic(settings)  # pyright: ignore
+    container.container_config.from_pydantic(settings)  # pyright: ignore
     # Инициализируем все Resource провайдеры сразу
     aw = container.init_resources()
     if isinstance(aw, Awaitable):

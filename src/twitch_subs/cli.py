@@ -190,7 +190,7 @@ def watch(
 
     @inject
     async def main(
-        settings: Settings = Provide[AppContainer.config],
+        settings: Settings = Provide[AppContainer.settings],
         repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
         event_bus: EventBus = Provide[AppContainer.event_bus],
         notifier: NotifierProtocol = Provide[AppContainer.notifier],
