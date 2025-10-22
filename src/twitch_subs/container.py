@@ -5,6 +5,8 @@ import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncIterator, Awaitable, Iterator
 
+import aio_pika
+from aio_pika.abc import AbstractRobustConnection
 from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
@@ -19,7 +21,7 @@ from twitch_subs.application.ports import (
 from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
-from twitch_subs.infrastructure.event_bus import InMemoryEventBus, RabbitMQEventBus
+from twitch_subs.infrastructure.event_bus import RabbitMQEventBus
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
@@ -75,24 +77,20 @@ def _bot_resource(token: str, session: AiohttpSession) -> Bot:
 
 
 @asynccontextmanager
-async def _event_bus_resource(
-    rabbitmq_url: str | None,
+async def _rabbit_event_bus_resource(
+    connection: AbstractRobustConnection,
     exchange: str,
     queue_name: str,
     prefetch_count: int,
 ) -> AsyncIterator[EventBus]:
-    if rabbitmq_url:
-        bus: EventBus = RabbitMQEventBus(
-            rabbitmq_url,
-            exchange=exchange,
-            queue_name=queue_name,
-            prefetch_count=prefetch_count,
-        )
-        async with bus:
-            yield bus
-    else:
-        yield InMemoryEventBus()
-        return
+    bus: EventBus = RabbitMQEventBus(
+        connection=connection,
+        exchange=exchange,
+        queue_name=queue_name,
+        prefetch_count=prefetch_count,
+    )
+    async with bus:
+        yield bus
 
 
 @asynccontextmanager
@@ -112,6 +110,15 @@ async def _day_scheduler_resource(
         scheduler.stop()
 
 
+@asynccontextmanager
+async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection]:
+    connection = await aio_pika.connect_robust(url=url)
+    try:
+        yield connection
+    finally:
+        await connection.close()
+
+
 # ---------- DI container ----------
 
 
@@ -127,6 +134,8 @@ class AppContainer(containers.DeclarativeContainer):
         database_url=container_config.database_url,
         echo=container_config.database_echo.as_bool(),
     )
+
+    rabbit_conn = providers.Resource(_rabbitmq_resource, container_config.rabbitmq_url)
 
     # Repositories
     watchlist_repo = providers.Singleton(SqliteWatchlistRepository, engine=engine)
@@ -154,8 +163,8 @@ class AppContainer(containers.DeclarativeContainer):
     )
     # Event bus (async resource to ensure graceful stop)
     event_bus = providers.Resource(
-        _event_bus_resource,
-        rabbitmq_url=container_config.rabbitmq_url.optional(),
+        _rabbit_event_bus_resource,
+        connection=rabbit_conn,
         exchange=container_config.rabbitmq_exchange,
         queue_name=container_config.rabbitmq_queue,
         prefetch_count=container_config.rabbitmq_prefetch.as_int(),

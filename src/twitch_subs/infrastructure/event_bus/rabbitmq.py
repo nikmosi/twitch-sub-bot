@@ -10,7 +10,6 @@ from datetime import datetime
 from types import TracebackType
 from typing import Any, Awaitable, DefaultDict, Dict, TypeVar, cast
 
-import aio_pika
 from aio_pika import DeliveryMode, ExchangeType, Message
 from aio_pika.abc import (
     AbstractChannel,
@@ -60,7 +59,7 @@ class RabbitMQEventBus(EventBus):
 
     def __init__(
         self,
-        url: str,
+        connection: AbstractRobustConnection,
         *,
         exchange: str = "twitch_subs.events",
         queue_name: str | None = None,
@@ -68,19 +67,18 @@ class RabbitMQEventBus(EventBus):
         dedup_capacity: int = 1024,
         stop_timeout: int = 5,
     ) -> None:
-        self._url = url
         self._exchange_name = exchange
         self._queue_name = queue_name
         self._prefetch_count = prefetch_count
         self._dedup_capacity = dedup_capacity
         self._stop_timeout = stop_timeout
+        self._connection: AbstractRobustConnection = connection
 
         self._handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = (
             defaultdict(list)
         )
         self._types_by_name: Dict[str, type[DomainEvent]] = {}
 
-        self._connection: AbstractRobustConnection | None = None
         self._publish_channel: AbstractChannel | None = None
         self._consume_channel: AbstractChannel | None = None
         self._exchange: AbstractExchange | None = None
@@ -121,7 +119,6 @@ class RabbitMQEventBus(EventBus):
             await exchange.publish(message, routing_key=routing_key)
 
     async def __aenter__(self) -> None:
-        await self._ensure_connection()
         await self._ensure_consumer()
         for event_type in list(self._handlers.keys()):
             await self._bind_event(event_type)
@@ -163,8 +160,6 @@ class RabbitMQEventBus(EventBus):
             tasks.append(
                 self._close_task("consume_channel", self._consume_channel.close())
             )
-        if self._connection is not None:
-            tasks.append(self._close_task("connection", self._connection.close()))
 
         if tasks:
             done, pending = await asyncio.wait(
@@ -199,23 +194,9 @@ class RabbitMQEventBus(EventBus):
         self._consume_exchange = None
         self._publish_channel = None
         self._consume_channel = None
-        self._connection = None
         self._closing = False
 
-    async def _ensure_connection(self) -> None:
-        async with self._connection_lock:
-            if self._connection is None or self._connection.is_closed:
-                self._connection = await aio_pika.connect_robust(self._url)
-                self._publish_channel = None
-                self._consume_channel = None
-                self._exchange = None
-                self._consume_exchange = None
-                self._queue = None
-
     async def _get_publish_exchange(self) -> AbstractExchange:
-        await self._ensure_connection()
-        if self._connection is None:
-            raise RuntimeError("Failed to establish RabbitMQ connection")
         if self._publish_channel is None or self._publish_channel.is_closed:
             self._publish_channel = await self._connection.channel()
             self._exchange = None
@@ -226,8 +207,6 @@ class RabbitMQEventBus(EventBus):
         return self._exchange
 
     async def _ensure_consumer(self) -> None:
-        if self._connection is None:
-            raise RuntimeError("RabbitMQ connection is not initialised")
         if self._consume_channel is None or self._consume_channel.is_closed:
             self._consume_channel = await self._connection.channel()
             await self._consume_channel.set_qos(prefetch_count=self._prefetch_count)
