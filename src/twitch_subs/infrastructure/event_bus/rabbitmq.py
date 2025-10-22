@@ -86,7 +86,6 @@ class RabbitMQEventBus(EventBus):
         self._queue: AbstractQueue | None = None
         self._consumer_tag: str | None = None
 
-        self._connection_lock = asyncio.Lock()
         self._closing = False
         self._deduplication: OrderedDict[str, None] = OrderedDict()
 
@@ -94,11 +93,7 @@ class RabbitMQEventBus(EventBus):
         self._handlers[event_type].append(handler)
         self._types_by_name[event_type.name()] = event_type
         if self._queue is not None:
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                return
-            loop.create_task(self._bind_event(event_type))
+            asyncio.create_task(self._bind_event(event_type))
 
     async def publish(self, *events: DomainEvent) -> None:
         if not events:
@@ -119,6 +114,9 @@ class RabbitMQEventBus(EventBus):
             await exchange.publish(message, routing_key=routing_key)
 
     async def __aenter__(self) -> None:
+        return await self.start()
+
+    async def start(self) -> None:
         await self._ensure_consumer()
         for event_type in list(self._handlers.keys()):
             await self._bind_event(event_type)
@@ -140,11 +138,15 @@ class RabbitMQEventBus(EventBus):
         self, exc_type: type[Exception] | None, exc: BaseException, tb: TracebackType
     ) -> None:
         self._closing = True
-        tasks: list[asyncio.Task[None]] = []
 
         if exc_type:
             logger.opt(exception=exc).error("occur exception in exit event bus.")
             logger.opt(exception=exc).trace(tb)
+
+        return await self.stop()
+
+    async def stop(self) -> None:
+        tasks: list[asyncio.Task[None]] = []
 
         if self._queue is not None and self._consumer_tag is not None:
             tasks.append(
