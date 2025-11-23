@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from types import SimpleNamespace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Sequence
 
 import pytest
@@ -16,7 +16,9 @@ from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.config import Settings
 from twitch_subs.domain.models import BroadcasterType, SubState
-from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
+from twitch_subs.infrastructure.repository_sqlite import (
+    SqliteSubscriptionStateRepository,
+)
 
 
 class StubEventBus:
@@ -153,7 +155,10 @@ def test_watch_bot_exception_exitcode(
 
     class DummyWatcher:
         async def watch(
-            self, logins: LoginsProvider | Sequence[str], interval: int, stop_event: asyncio.Event
+            self,
+            logins: LoginsProvider | Sequence[str],
+            interval: int,
+            stop_event: asyncio.Event,
         ) -> None:
             stop_event.set()
 
@@ -275,10 +280,6 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     db = tmp_path / "watch.db"
     configure_env(monkeypatch, db)
     stub_bus = StubEventBus()
-
-    class FakeRepo:
-        def list(self) -> list[str]:
-            return ["foo"]
 
     class FakeNotifier:
         async def send_message(self, *args: Any, **kwargs: Any) -> None:  # noqa: D401

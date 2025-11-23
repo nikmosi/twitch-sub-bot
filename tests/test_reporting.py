@@ -7,7 +7,11 @@ from twitch_subs.application.reporting import (
     DayChangeScheduler,
     crontab,
 )
-from twitch_subs.application.ports import EventBus, NotifierProtocol, SubscriptionStateRepo
+from twitch_subs.application.ports import (
+    EventBus,
+    NotifierProtocol,
+    SubscriptionStateRepo,
+)
 from twitch_subs.domain.events import DayChanged, LoopCheckFailed, LoopChecked
 from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, SubState
 
@@ -31,7 +35,9 @@ class StubNotifier(NotifierProtocol):
     def __init__(self) -> None:
         self.reports: list[tuple[list[LoginReportInfo], int, int]] = []
 
-    async def notify_about_change(self, status, curr) -> None:  # pragma: no cover - unused
+    async def notify_about_change(
+        self, status, curr
+    ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
     async def notify_about_start(self) -> None:  # pragma: no cover - unused
@@ -46,7 +52,10 @@ class StubNotifier(NotifierProtocol):
         self.reports.append((list(states), checks, errors))
 
     async def send_message(
-        self, text: str, disable_web_page_preview: bool = True, disable_notification: bool = False
+        self,
+        text: str,
+        disable_web_page_preview: bool = True,
+        disable_notification: bool = False,
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
@@ -75,7 +84,12 @@ class StubCron:
 async def test_collector_sends_report_and_resets() -> None:
     repo = StubRepo(
         [
-            SubState("foo", BroadcasterType.AFFILIATE, tier=BroadcasterType.AFFILIATE.value, since=None),
+            SubState(
+                "foo",
+                BroadcasterType.AFFILIATE,
+                tier=BroadcasterType.AFFILIATE.value,
+                since=None,
+            ),
             SubState("bar", BroadcasterType.NONE, tier=None, since=None),
         ]
     )
@@ -164,7 +178,9 @@ def test_crontab_wrapper(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         return "job"
 
-    monkeypatch.setattr("twitch_subs.application.reporting.aiocron.crontab", fake_crontab)
+    monkeypatch.setattr(
+        "twitch_subs.application.reporting.aiocron.crontab", fake_crontab
+    )
 
     job = crontab("*/10 * * * *", func=None, start=False, args=(1,), kwargs={"x": 2})
 

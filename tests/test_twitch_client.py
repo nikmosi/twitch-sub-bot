@@ -167,9 +167,7 @@ async def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_5xx_raises(
-    monkeypatch: pytest.MonkeyPatch, token_ok: None
-) -> None:
+async def test_5xx_raises(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
     async def fake_get(
         self,
         path: str,
@@ -189,9 +187,7 @@ async def test_5xx_raises(
 
 
 @pytest.mark.asyncio
-async def test_rate_limit(
-    monkeypatch: pytest.MonkeyPatch, token_ok: None
-) -> None:
+async def test_rate_limit(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
     async def fake_get(
         self,
         path: str,
@@ -242,9 +238,7 @@ def test_from_creds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_user_none(
-    monkeypatch: pytest.MonkeyPatch, token_ok: None
-) -> None:
+async def test_get_user_none(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
     async def fake_get(
         self,
         path: str,

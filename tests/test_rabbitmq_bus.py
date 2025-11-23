@@ -161,7 +161,9 @@ async def test_stop_closes_resources(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_handle_message_deduplicates_events(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_handle_message_deduplicates_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     handled: list[UserAdded] = []
 
     bus = RabbitMQEventBus("amqp://example")

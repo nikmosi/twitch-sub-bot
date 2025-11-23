@@ -65,7 +65,9 @@ class FakeNotifier(NotifierProtocol):
         self.started = 0
         self.stopped = 0
 
-    async def notify_about_change(self, status, curr) -> None:  # pragma: no cover - unused
+    async def notify_about_change(
+        self, status, curr
+    ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
     async def notify_about_start(self) -> None:
@@ -74,7 +76,9 @@ class FakeNotifier(NotifierProtocol):
     async def notify_about_stop(self) -> None:
         self.stopped += 1
 
-    async def notify_report(self, states, checks: int, errors: int) -> None:  # pragma: no cover - unused
+    async def notify_report(
+        self, states, checks: int, errors: int
+    ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
     async def send_message(
@@ -150,7 +154,9 @@ async def test_watch_publishes_failures_and_stops() -> None:
     notifier = FakeNotifier()
     watcher = Watcher(twitch, notifier, repo, bus)
 
-    async def failing_run_once(logins: Sequence[str], stop_event: asyncio.Event) -> bool:
+    async def failing_run_once(
+        logins: Sequence[str], stop_event: asyncio.Event
+    ) -> bool:
         raise RuntimeError("boom")
 
     watcher.run_once = failing_run_once  # type: ignore[assignment]
@@ -162,12 +168,16 @@ async def test_watch_publishes_failures_and_stops() -> None:
         await asyncio.sleep(0.01)
         stop_event.set()
 
-    task = asyncio.create_task(watcher.watch(provider, interval=0.1, stop_event=stop_event))
+    task = asyncio.create_task(
+        watcher.watch(provider, interval=0.1, stop_event=stop_event)
+    )
     stopper = asyncio.create_task(trigger_stop())
     await asyncio.gather(task, stopper)
 
     assert notifier.started == 1 and notifier.stopped == 1
-    failure_events = [event for event in bus.events if isinstance(event, LoopCheckFailed)]
+    failure_events = [
+        event for event in bus.events if isinstance(event, LoopCheckFailed)
+    ]
     assert failure_events and failure_events[0].error == "boom"
 
 

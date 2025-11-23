@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -179,7 +178,9 @@ async def test_register_notification_handlers_sends_messages() -> None:
         if event_type is UserAdded:
             await handler(UserAdded(login="bar"))
         if event_type is OnceChecked:
-            await handler(OnceChecked(login="foo", current_state=BroadcasterType.PARTNER))
+            await handler(
+                OnceChecked(login="foo", current_state=BroadcasterType.PARTNER)
+            )
         if event_type is LoopChecked:
             await handler(LoopChecked(logins=("foo", "bar")))
         if event_type is LoopCheckFailed:

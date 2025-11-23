@@ -65,10 +65,12 @@ def test_subscription_state_crud(tmp_path: Path) -> None:
 def test_subscription_state_set_many(tmp_path: Path) -> None:
     db = tmp_path / "many.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    repo.set_many([
-        SubState("a", BroadcasterType.AFFILIATE),
-        SubState("b", BroadcasterType.NONE),
-    ])
+    repo.set_many(
+        [
+            SubState("a", BroadcasterType.AFFILIATE),
+            SubState("b", BroadcasterType.NONE),
+        ]
+    )
     rows = repo.list_all()
     assert {r.login for r in rows} == {"a", "b"}
 

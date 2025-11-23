@@ -64,9 +64,7 @@ class TwitchClient(TwitchClientProtocol):
         if r.status_code == 401:
             logger.warning("Twitch 401: refreshing token and retrying once…")
             await self._refresh_app_token()
-            r = await self._http.get(
-                path, params=params, headers=self._auth_headers()
-            )
+            r = await self._http.get(path, params=params, headers=self._auth_headers())
         r.raise_for_status()
         return r.json()
 

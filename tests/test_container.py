@@ -18,7 +18,9 @@ class FakeNotifier:
 
 
 class FakeBot:
-    def __init__(self, token: str, session: AiohttpSession, default: object | None = None) -> None:
+    def __init__(
+        self, token: str, session: AiohttpSession, default: object | None = None
+    ) -> None:
         self.token = token
         self.session = session
         self.default = default
@@ -82,7 +84,9 @@ async def test_build_container_initializes_resources(
     monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
     monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
     monkeypatch.setattr("twitch_subs.container.AiohttpSession", FakeSession)
-    monkeypatch.setattr("twitch_subs.container.DayChangeScheduler", FakeDayChangeScheduler)
+    monkeypatch.setattr(
+        "twitch_subs.container.DayChangeScheduler", FakeDayChangeScheduler
+    )
 
     container: AppContainer = await build_container(settings)
 

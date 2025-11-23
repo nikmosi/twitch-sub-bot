@@ -81,7 +81,9 @@ def test_handle_command_unknown(tmp_path: Path) -> None:
     assert bot.handle_command("/list") == "Watchlist is empty"
 
 
-def test_id_filter_and_handlers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_id_filter_and_handlers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = make_service(tmp_path)
     bot = TelegramWatchlistBot(StubBot(), "1", service)
 
@@ -191,7 +193,9 @@ async def test_notifier_send_message_handles_errors() -> None:
     assert bot.fail_next is False
 
 
-def test_run_polling_uses_asyncio_run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_run_polling_uses_asyncio_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     service = make_service(tmp_path)
     watch_bot = TelegramWatchlistBot(StubBot(), "1", service)
     called: dict[str, object] = {}

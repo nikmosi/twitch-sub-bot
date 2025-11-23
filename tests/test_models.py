@@ -1,6 +1,5 @@
 import pytest
 
-import pytest
 from pydantic import ValidationError
 
 from twitch_subs.domain.models import (
@@ -27,13 +26,21 @@ def test_login_report_info_none_defaults_to_none() -> None:
 @pytest.mark.parametrize(
     "raw_status, tier, expected_type, expected_tier",
     [
-        (BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value, BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value),
+        (
+            BroadcasterType.AFFILIATE,
+            BroadcasterType.AFFILIATE.value,
+            BroadcasterType.AFFILIATE,
+            BroadcasterType.AFFILIATE.value,
+        ),
         (BroadcasterType.NONE, None, BroadcasterType.NONE, None),
         ("partner", None, BroadcasterType.PARTNER, None),
     ],
 )
 def test_sub_state_normalizes_inputs(
-    raw_status: BroadcasterType | str, tier: str | None, expected_type: BroadcasterType, expected_tier: str | None
+    raw_status: BroadcasterType | str,
+    tier: str | None,
+    expected_type: BroadcasterType,
+    expected_tier: str | None,
 ) -> None:
     state = SubState("foo", raw_status, tier=tier)
 
