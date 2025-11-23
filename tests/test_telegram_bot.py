@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,12 +14,10 @@ from twitch_subs.domain.models import (
     LoginStatus,
     UserRecord,
 )
+from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
-from twitch_subs.infrastructure.telegram import (
-    IDFilter,
-    TelegramNotifier,
-    TelegramWatchlistBot,
-)
+from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
+from twitch_subs.infrastructure.telegram.filters import IDFilter
 
 
 class StubSession:
@@ -81,9 +81,7 @@ def test_handle_command_unknown(tmp_path: Path) -> None:
     assert bot.handle_command("/list") == "Watchlist is empty"
 
 
-def test_id_filter_and_handlers(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_id_filter_and_handlers(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     service = make_service(tmp_path)
     bot = TelegramWatchlistBot(StubBot(), "1", service)
 
@@ -202,7 +200,7 @@ def test_run_polling_uses_asyncio_run(monkeypatch: pytest.MonkeyPatch, tmp_path:
         called["coro"] = coro
         coro.close()
 
-    monkeypatch.setattr("twitch_subs.infrastructure.telegram.asyncio.run", fake_run)
+    monkeypatch.setattr("twitch_subs.infrastructure.telegram.bot.asyncio.run", fake_run)
 
     watch_bot.run_polling()
 
@@ -213,7 +211,7 @@ def test_run_polling_uses_asyncio_run(monkeypatch: pytest.MonkeyPatch, tmp_path:
 async def test_run_and_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     dispatcher = DummyDispatcher()
     monkeypatch.setattr(
-        "twitch_subs.infrastructure.telegram.Dispatcher", lambda: dispatcher
+        "twitch_subs.infrastructure.telegram.bot.Dispatcher", lambda: dispatcher
     )
     bot = StubBot()
     service = make_service(tmp_path)

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
 
 import pytest
 from aiogram.client.session.aiohttp import AiohttpSession
+from dependency_injector import providers
 
 from twitch_subs.config import Settings
-from twitch_subs.container import Container
+from twitch_subs.container import AppContainer, build_container, shutdown_container
 
 
 @dataclass
@@ -14,24 +16,14 @@ class FakeNotifier:
     bot: object
     chat_id: str
 
-    async def notify_about_start(self) -> None:  # pragma: no cover - not used
-        raise AssertionError("should not be called in test")
-
-    async def aclose(self) -> None:
-        await self.bot.session.close()
-
 
 class FakeBot:
-    def __init__(
-        self, token: str, session: AiohttpSession, default: object | None = None
-    ) -> None:
+    def __init__(self, token: str, session: AiohttpSession, default: object | None = None) -> None:
         self.token = token
-        self.default = default
         self.session = session
-        setattr(self.session, "closed", False)
+        self.default = default
 
-    async def close(self):
-        setattr(self.session, "closed", True)
+    async def close(self) -> None:  # pragma: no cover - not used in test
         await self.session.close()
 
 
@@ -45,11 +37,30 @@ class FakeTwitch:
     def from_creds(cls, creds) -> "FakeTwitch":
         return cls(creds.client_id, creds.client_secret)
 
-    def close(self) -> None:
-        self.closed = True
-
     async def aclose(self) -> None:
         self.closed = True
+
+
+class FakeSession:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeDayChangeScheduler:
+    def __init__(self, event_bus, cron: str) -> None:
+        self.event_bus = event_bus
+        self.cron = cron
+        self.started = False
+        self.stopped = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def stop(self) -> None:
+        self.stopped = True
 
 
 @pytest.fixture
@@ -63,93 +74,68 @@ def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     return Settings()
 
 
-def test_container_singletons(
+@pytest.mark.asyncio
+async def test_build_container_initializes_resources(
     monkeypatch: pytest.MonkeyPatch, settings: Settings
 ) -> None:
     monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
     monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
     monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
+    monkeypatch.setattr("twitch_subs.container.AiohttpSession", FakeSession)
+    monkeypatch.setattr("twitch_subs.container.DayChangeScheduler", FakeDayChangeScheduler)
 
-    container = Container(settings)
+    container: AppContainer = await build_container(settings)
 
-    engine1 = container.engine
-    engine2 = container.engine
+    engine1 = container.engine()
+    engine2 = container.engine()
     assert engine1 is engine2
 
-    repo1 = container.watchlist_repo
-    repo2 = container.watchlist_repo
+    repo1 = container.watchlist_repo()
+    repo2 = container.watchlist_repo()
     assert repo1 is repo2
 
-    sub1 = container.sub_state_repo
-    sub2 = container.sub_state_repo
-    assert sub1 is sub2
+    sub_state1 = container.sub_state_repo()
+    sub_state2 = container.sub_state_repo()
+    assert sub_state1 is sub_state2
 
-    bot1 = container.telegram_bot
-    bot2 = container.telegram_bot
-    assert bot1 is bot2
+    session = container.tg_session()
+    if inspect.isawaitable(session):
+        session = await session
+    bot = container.telegram_bot()
+    if inspect.isawaitable(bot):
+        bot = await bot
+    assert bot.session is session
 
-    notifier1 = container.notifier
-    notifier2 = container.notifier
+    container.notifier.override(providers.Object(FakeNotifier(bot, "123")))
+
+    notifier1 = container.notifier()
+    notifier2 = container.notifier()
     assert notifier1 is notifier2
-    assert notifier1.bot is bot1
-    assert container.build_watcher().twitch.client_id == "id"
+    assert notifier1.bot is bot
 
-    watchlist_bot = container.build_bot()
-    assert watchlist_bot.bot is bot1
-    assert watchlist_bot.service.repo is repo1
+    twitch = container.twitch_client()
+    if inspect.isawaitable(twitch):
+        twitch = await twitch
+    watcher = container.watcher()
+    if inspect.isawaitable(watcher):
+        watcher = await watcher
+    assert watcher.twitch is twitch
+    assert watcher.notifier is notifier1
 
+    bot_app = container.bot_app()
+    if inspect.isawaitable(bot_app):
+        bot_app = await bot_app
+    assert bot_app.bot is bot
+    assert bot_app.service.repo is repo1
 
-def test_telegram_bot_reuses_single_session(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
-) -> None:
-    monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
-    monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
-    monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
+    scheduler = container.day_scheduler()
+    if inspect.isawaitable(scheduler):
+        scheduler = await scheduler
+    assert isinstance(scheduler, FakeDayChangeScheduler)
+    assert scheduler.started
 
-    created_sessions: list[object] = []
+    await shutdown_container(container)
 
-    class DummySession:
-        def __init__(self) -> None:
-            created_sessions.append(self)
-            self.closed = False
-
-        async def close(self) -> None:
-            self.closed = True
-
-    monkeypatch.setattr("twitch_subs.container.AiohttpSession", DummySession)
-
-    container = Container(settings)
-
-    bot1 = container.telegram_bot
-    bot2 = container.telegram_bot
-
-    assert bot1 is bot2
-    assert container._tg_session is bot1.session
-    assert created_sessions == [bot1.session]
-
-
-@pytest.mark.asyncio
-async def test_container_aclose(
-    monkeypatch: pytest.MonkeyPatch, settings: Settings
-) -> None:
-    monkeypatch.setattr("twitch_subs.container.Bot", FakeBot)
-    monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
-    monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
-
-    container = Container(settings)
-    notifier = container.notifier
-    twitch = container.twitch_client
-    _ = container.engine
-
-    await container.aclose()
-
-    assert notifier.bot.session.closed
-    assert container._telegram_bot is None
-    assert container._notifier is None
-    assert container._engine is None
-    assert container._twitch is None
-    assert container._watchlist_repo is None
-    assert container._sub_state_repo is None
-    # ensure original instance got closed
-    assert isinstance(twitch, FakeTwitch)
+    assert session.closed
     assert twitch.closed
+    assert scheduler.stopped

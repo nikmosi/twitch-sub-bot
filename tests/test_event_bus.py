@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from twitch_subs.domain.events import DayChanged, LoopChecked
-from twitch_subs.infra.events import InMemoryEventBus
+from twitch_subs.infrastructure.event_bus import InMemoryEventBus
 
 
 @pytest.mark.asyncio

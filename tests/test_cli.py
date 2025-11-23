@@ -8,11 +8,13 @@ from typing import Any, Sequence
 
 import pytest
 import typer
+from dependency_injector import providers
 from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.config import Settings
 from twitch_subs.domain.models import BroadcasterType, SubState
 from twitch_subs.infrastructure.repository_sqlite import SqliteSubscriptionStateRepository
 
@@ -106,20 +108,11 @@ async def test_run_watch_invokes_watcher() -> None:
         def get(self) -> list[str]:
             return ["foo"]
 
-    class DummyContainer:
-        def __init__(self) -> None:
-            self.called = 0
-
-        def ensure_day_scheduler(self) -> None:
-            self.called += 1
-
-    container = DummyContainer()
     watcher = DummyWatcher()
     repo = SimpleNamespace(list=lambda: ["foo"])
     stop = asyncio.Event()
-    await cli.run_watch(container, watcher, repo, interval=1, stop=stop)
+    await cli.run_watch(watcher, repo, interval=1, stop=stop)
     assert watcher.calls == [(["foo"], 1)]
-    assert container.called == 1
 
 
 @pytest.mark.asyncio
@@ -152,10 +145,20 @@ def test_watch_bot_exception_exitcode(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     stub_bus = StubEventBus()
-    monkeypatch.setattr(container_mod.Container, "event_bus", property(lambda self: stub_bus))
-    monkeypatch.setattr(container_mod, "Bot", DummyAiogramBot)
-    monkeypatch.setattr(container_mod, "TelegramNotifier", DummyNotifier)
-    monkeypatch.setattr(container_mod, "TelegramWatchlistBot", DummyBot)
+    dummy_notifier = DummyNotifier(DummyAiogramBot("token", object()), "chat")
+    dummy_repo = SimpleNamespace(list=lambda: ["foo"])
+    dummy_state_repo = SimpleNamespace(
+        get_sub_state=lambda login: SubState(login, BroadcasterType.NONE)
+    )
+
+    class DummyWatcher:
+        async def watch(
+            self, logins: LoginsProvider | Sequence[str], interval: int, stop_event: asyncio.Event
+        ) -> None:
+            stop_event.set()
+
+    dummy_watcher = DummyWatcher()
+    dummy_bot = DummyBot()
 
     async def fake_watch(
         self: container_mod.Watcher,
@@ -170,6 +173,20 @@ def test_watch_bot_exception_exitcode(
 
     monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
     monkeypatch.setattr(cli, "run_bot", boom_bot)
+
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.event_bus.override(providers.Object(stub_bus))
+        container.notifier.override(providers.Object(dummy_notifier))
+        container.sub_state_repo.override(providers.Object(dummy_state_repo))
+        container.watchlist_repo.override(providers.Object(dummy_repo))
+        container.watcher.override(providers.Object(dummy_watcher))
+        container.bot_app.override(providers.Object(dummy_bot))
+        container.settings.override(providers.Object(settings))
+        return container
+
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
 
     configure_env(monkeypatch, tmp_path / "db.sqlite")
 
@@ -213,6 +230,15 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
         SubState("bar", BroadcasterType.NONE, since=None, updated_at=now)
     )
 
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.sub_state_repo.override(providers.Object(repo))
+        container.settings.override(providers.Object(settings))
+        return container
+
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
+
     runner = CliRunner()
     get_result = runner.invoke(cli.app, ["state", "get", "foo"])
     assert get_result.exit_code == 0
@@ -229,6 +255,16 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
 def test_state_list_empty(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     db = tmp_path / "state-empty.db"
     configure_env(monkeypatch, db)
+    repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
+
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.sub_state_repo.override(providers.Object(repo))
+        container.settings.override(providers.Object(settings))
+        return container
+
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
     runner = CliRunner()
     res = runner.invoke(cli.app, ["state", "list"])
     assert res.exit_code == 0
@@ -268,63 +304,41 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         def get_sub_state(self, login: str) -> SubState | None:  # noqa: D401
             return None
 
-    class FakeContainer:
-        def __init__(self) -> None:
-            self.settings = SimpleNamespace(
-                telegram_bot_token="token",
-                telegram_chat_id="chat",
-                rabbitmq_url=None,
-                rabbitmq_exchange="",
-                rabbitmq_queue="",
-                rabbitmq_prefetch=10,
-            )
-            self.watchlist_repo = FakeRepo()
-            self.closed = False
-            self.notifier = FakeNotifier()
-            self.sub_state_repo = FakeStateRepo()
-            self.event_bus = stub_bus
-
-        def build_watcher(self) -> str:
-            return "watcher"
-
-        def build_bot(self) -> str:
-            return "bot"
-
-        def ensure_day_scheduler(self) -> None:
-            return None
-
-        async def aclose(self) -> None:
-            self.closed = True
-            await self.event_bus.stop()
-
-    fake_container = FakeContainer()
-    monkeypatch.setattr(cli, "Container", lambda _: fake_container)
-
-    calls = {"watch": False, "bot": False}
+    fake_repo = FakeRepo()
+    fake_notifier = FakeNotifier()
+    fake_state_repo = FakeStateRepo()
+    calls: dict[str, Any] = {}
 
     async def fake_run_watch(
-        container: Any,
-        watcher: Any,
-        repo: Any,
-        interval: int,
-        stop: asyncio.Event,
+        watcher: Any, repo: Any, interval: int, stop_event: asyncio.Event
     ) -> None:
-        calls["watch"] = True
-        await asyncio.sleep(0)
-        stop.set()
+        calls["watch"] = (watcher, repo.list(), interval)
+        stop_event.set()
 
-    async def fake_run_bot(bot: Any, stop: asyncio.Event) -> None:
-        calls["bot"] = True
-        await stop.wait()
+    async def fake_run_bot(bot: Any, stop_event: asyncio.Event) -> None:
+        calls["bot"] = bot
+        stop_event.set()
 
     monkeypatch.setattr(cli, "run_watch", fake_run_watch)
     monkeypatch.setattr(cli, "run_bot", fake_run_bot)
+
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.event_bus.override(providers.Object(stub_bus))
+        container.watchlist_repo.override(providers.Object(fake_repo))
+        container.notifier.override(providers.Object(fake_notifier))
+        container.sub_state_repo.override(providers.Object(fake_state_repo))
+        container.watcher.override(providers.Object("watcher"))
+        container.bot_app.override(providers.Object("bot"))
+        container.settings.override(providers.Object(settings))
+        return container
+
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
 
     runner = CliRunner()
     result = runner.invoke(cli.app, ["watch", "--interval", "5"])
 
     assert result.exit_code == 0
-    assert fake_container.closed
-    assert calls["watch"]
-    assert calls["bot"]
-    assert stub_bus.started == 1
+    assert calls["watch"] == ("watcher", ["foo"], 5)
+    assert calls["bot"] == "bot"
