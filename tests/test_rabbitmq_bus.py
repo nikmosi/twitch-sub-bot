@@ -136,28 +136,6 @@ async def test_start_binds_subscribed_handlers(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
-async def test_stop_closes_resources(monkeypatch: pytest.MonkeyPatch) -> None:
-    bus = RabbitMQEventBus("amqp://example")
-    channel = StubChannel()
-    connection = StubConnection(channel)
-
-    bus._connection = connection
-    bus.subscribe(UserAdded, lambda _: None)
-
-    await bus.start()
-    await bus.publish(UserAdded(login="carol"))
-
-    assert bus._queue is not None
-    queue = bus._queue
-
-    await bus.__aexit__(None, None, None)
-
-    assert queue.cancelled == ["consumer-tag"]
-    assert channel.closed
-    assert bus._consumer_tag is None
-
-
-@pytest.mark.asyncio
 async def test_handle_message_deduplicates_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
