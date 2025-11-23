@@ -18,13 +18,13 @@ T = TypeVar("T", bound=DomainEvent)
 class InMemoryEventBus(EventBus):
     """Simple event bus dispatching events to in-process handlers."""
 
-    idempotency_queue_maxlen = 100
-
     _handlers: DefaultDict[type[DomainEvent], list[Handler[Any]]] = field(
         default_factory=lambda: defaultdict(list)
     )
 
-    _idempotency_queue: Deque[DomainEvent] = deque(maxlen=idempotency_queue_maxlen)
+    _idempotency_queue: Deque[DomainEvent] = field(
+        default_factory=lambda: deque(maxlen=100)
+    )
 
     async def publish(self, *events: DomainEvent) -> None:
         for event in events:
