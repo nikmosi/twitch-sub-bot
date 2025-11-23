@@ -9,7 +9,7 @@ from collections import OrderedDict, defaultdict
 from dataclasses import dataclass
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Awaitable, DefaultDict, Dict, TypeVar, cast
+from typing import Any, Awaitable, DefaultDict, Dict, Self, TypeVar, cast
 
 from aio_pika import DeliveryMode, ExchangeType, Message
 from aio_pika.abc import (
@@ -19,6 +19,7 @@ from aio_pika.abc import (
     AbstractQueue,
     AbstractRobustConnection,
 )
+from aiormq import ChannelInvalidStateError
 from loguru import logger
 
 from twitch_subs.application.ports import EventBus, Handler
@@ -123,8 +124,9 @@ class RabbitMQEventBus(EventBus):
             routing_key = _routing_key_from_type(type(event))
             await exchange.publish(message, routing_key=routing_key)
 
-    async def __aenter__(self) -> None:
-        return await self.start()
+    async def __aenter__(self) -> Self:
+        await self.start()
+        return self
 
     async def start(self) -> None:
         await self._ensure_consumer()
@@ -145,68 +147,114 @@ class RabbitMQEventBus(EventBus):
         return asyncio.create_task(runner())
 
     async def __aexit__(
-        self, exc_type: type[Exception] | None, exc: BaseException, tb: TracebackType
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException,
+        tb: TracebackType,
     ) -> None:
         self._closing = True
 
-        if exc_type:
-            logger.opt(exception=exc).error("occur exception in exit event bus.")
-            logger.opt(exception=exc).trace(tb)
+        if exc_type is GeneratorExit:
+            try:
+                # короткий таймаут, чтобы не блокировать shutdown loop
+                await asyncio.wait_for(self.stop(), timeout=2)
+            except (asyncio.TimeoutError, GeneratorExit):
+                LOGGER.debug(
+                    "GeneratorExit during event bus cleanup; quick-stop suppressed."
+                )
+            except Exception:
+                LOGGER.exception(
+                    "Error during quick cleanup of RabbitMQEventBus (suppressed)."
+                )
+            return
 
-        return await self.stop()
+        # для обычных исключений — логируем
+        if exc_type:
+            LOGGER.opt(exception=exc).error("occur exception in exit event bus.")
+            LOGGER.opt(exception=exc).trace(tb)
 
     async def stop(self) -> None:
-        tasks: list[asyncio.Task[None]] = []
-
-        if self._queue is not None and self._consumer_tag is not None:
-            tasks.append(
-                self._close_task("consumer", self._queue.cancel(self._consumer_tag))
-            )
-            self._consumer_tag = None
-
-        if self._publish_channel is not None:
-            tasks.append(
-                self._close_task("publish_channel", self._publish_channel.close())
-            )
-        if self._consume_channel is not None:
-            tasks.append(
-                self._close_task("consume_channel", self._consume_channel.close())
-            )
-
-        if tasks:
-            done, pending = await asyncio.wait(
-                tasks, timeout=self._stop_timeout, return_when=asyncio.ALL_COMPLETED
-            )
-            # обработать неожиданные ошибки (если runner их не проглотил)
-            for t in done:
+        # Выполняем операции по очереди, чтобы уменьшить гонки и точно обработать ошибки
+        try:
+            # 1) Отмена consumer (может делать RPC -> обрабатываем отдельно)
+            if self._queue is not None and self._consumer_tag is not None:
                 try:
-                    t.result()
+                    # Пытаемся заранее обнаружить, закрыт ли канал, чтобы избежать RPC
+                    channel = getattr(self._queue, "channel", None) or getattr(
+                        self._queue, "_channel", None
+                    )
+                    if channel is None or getattr(channel, "is_closed", False):
+                        LOGGER.debug(
+                            "stop: queue channel already closed; skipping cancel()"
+                        )
+                    else:
+                        await asyncio.wait_for(
+                            self._queue.cancel(self._consumer_tag),
+                            timeout=self._stop_timeout,
+                        )
+                except ChannelInvalidStateError:
+                    LOGGER.debug(
+                        "stop: channel invalid state while cancelling consumer (suppressed)"
+                    )
+                except asyncio.TimeoutError:
+                    LOGGER.warning("stop: timeout while cancelling consumer")
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
                     LOGGER.opt(exception=e).exception(
-                        "stop: unexpected error in close task"
+                        "stop: error while closing consumer"
                     )
+                finally:
+                    self._consumer_tag = None
 
-            if pending:
-                for t in pending:
-                    t.cancel()
-                # ждём повторно после отмены
-                _, still_pending = await asyncio.wait(
-                    pending, timeout=self._stop_timeout
-                )
-                if still_pending:
-                    LOGGER.warning(
-                        f"stop: {len(still_pending)} close task(s) stuck after cancel"
+            # 2) Закрыть publish_channel
+            if self._publish_channel is not None:
+                try:
+                    await asyncio.wait_for(
+                        self._publish_channel.close(), timeout=self._stop_timeout
                     )
+                except ChannelInvalidStateError:
+                    LOGGER.debug(
+                        "stop: publish_channel already invalid/closed (suppressed)"
+                    )
+                except asyncio.TimeoutError:
+                    LOGGER.warning("stop: timeout while closing publish_channel")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    LOGGER.opt(exception=e).exception(
+                        "stop: error while closing publish_channel"
+                    )
+                finally:
+                    self._publish_channel = None
 
-        # обнуление ссылок всегда
-        self._queue = None
-        self._exchange = None
-        self._consume_exchange = None
-        self._publish_channel = None
-        self._consume_channel = None
-        self._closing = False
+            # 3) Закрыть consume_channel
+            if self._consume_channel is not None:
+                try:
+                    await asyncio.wait_for(
+                        self._consume_channel.close(), timeout=self._stop_timeout
+                    )
+                except ChannelInvalidStateError:
+                    LOGGER.debug(
+                        "stop: consume_channel already invalid/closed (suppressed)"
+                    )
+                except asyncio.TimeoutError:
+                    LOGGER.warning("stop: timeout while closing consume_channel")
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    LOGGER.opt(exception=e).exception(
+                        "stop: error while closing consume_channel"
+                    )
+                finally:
+                    self._consume_channel = None
+
+        finally:
+            # Очистка ссылок
+            self._queue = None
+            self._exchange = None
+            self._consume_exchange = None
+            self._closing = False
 
     async def _get_publish_exchange(self) -> AbstractExchange:
         if self._publish_channel is None or self._publish_channel.is_closed:
