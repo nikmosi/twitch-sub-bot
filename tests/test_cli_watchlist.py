@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from typing import Any
 
@@ -59,6 +60,33 @@ class StubEventBus:
 
     def subscribe(self, event_type: type[Any], handler: Any) -> None:
         self.subscriptions.append((event_type, handler))
+
+
+@pytest.fixture(autouse=True)
+def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
+    """Avoid connecting to external services during CLI runs."""
+
+    stub_bus = StubEventBus()
+
+    @asynccontextmanager
+    async def _yield(obj: Any):
+        yield obj
+
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+
+        container.rabbit_conn.override(providers.Resource(_yield, object()))
+        container.event_bus.override(providers.Resource(_yield, stub_bus))
+        container.day_scheduler.override(providers.Resource(_yield, None))
+        container.settings.override(providers.Object(settings))
+
+        await container.init_resources()
+        return container
+
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
+
+    return stub_bus
 
 
 def run(command: list[str], monkeypatch: pytest.MonkeyPatch, db: Path):
