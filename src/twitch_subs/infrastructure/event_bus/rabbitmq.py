@@ -6,6 +6,7 @@ import asyncio
 import json
 import re
 from collections import OrderedDict, defaultdict
+from dataclasses import dataclass
 from datetime import datetime
 from types import TracebackType
 from typing import Any, Awaitable, DefaultDict, Dict, TypeVar, cast
@@ -21,9 +22,7 @@ from aio_pika.abc import (
 from loguru import logger
 
 from twitch_subs.application.ports import EventBus, Handler
-from twitch_subs.domain.events import (
-    DomainEvent,  # Pydantic BaseModel с полями id, occurred_at
-)
+from twitch_subs.domain.events import DomainEvent
 
 LOGGER = logger
 
@@ -52,6 +51,17 @@ def _serialize_event(event: DomainEvent) -> dict[str, Any]:
         "version": _EVENT_VERSION,
         "payload": event.model_dump(mode="json", exclude={"id", "occurred_at"}),
     }
+
+
+@dataclass(slots=True, kw_only=True)
+class Producer:
+    connection: AbstractRobustConnection
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
 
 
 class RabbitMQEventBus(EventBus):
@@ -237,19 +247,7 @@ class RabbitMQEventBus(EventBus):
             data = json.loads(message.body)
 
             # dedup
-            event_id: str | None = None
-            header_id = message.headers.get("event_id")
-            if isinstance(header_id, bytes):
-                event_id = header_id.decode("utf-8")
-            elif header_id is not None:
-                event_id = str(header_id)
-            else:
-                pid = data.get("id")
-                event_id = (
-                    pid.decode("utf-8")
-                    if isinstance(pid, bytes)
-                    else (str(pid) if pid is not None else None)
-                )
+            event_id: str = str(message.headers.get("event_id"))
             if event_id and event_id in self._deduplication:
                 return
 

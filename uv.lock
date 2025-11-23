@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.12"
 
 [[package]]
@@ -676,6 +676,15 @@ wheels = [
 ]
 
 [[package]]
+name = "py2puml"
+version = "0.10.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/06/0424832eeeed18010e7642cdec9247faab6b0164633b5ddcde9f37f4ce7d/py2puml-0.10.0.tar.gz", hash = "sha256:1180392f0c2274eeba9d65cef07a7daf45d1c4c115014b5c2fcc56ce59a2204b", size = 24848, upload-time = "2025-03-27T12:56:53.666Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d5/af/6f6e1da88cb7f28d5b2eeafab4621965f6da869ce2d3fb92fc34d3fccc45/py2puml-0.10.0-py3-none-any.whl", hash = "sha256:a41076cd910490b61ed7ae80ad918ef66b3d82ddfbd489e8ec2fa0dc65f63bb6", size = 26151, upload-time = "2025-03-27T12:56:52.608Z" },
+]
+
+[[package]]
 name = "pydantic"
 version = "2.11.10"
 source = { registry = "https://pypi.org/simple" }
@@ -960,6 +969,7 @@ dependencies = [
     { name = "dependency-injector" },
     { name = "httpx" },
     { name = "loguru" },
+    { name = "py2puml" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
@@ -987,6 +997,7 @@ requires-dist = [
     { name = "dependency-injector", specifier = ">=4.48.2" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "loguru", specifier = ">=0.7.3" },
+    { name = "py2puml", specifier = ">=0.10.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pydantic-settings", specifier = ">=2.0" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
