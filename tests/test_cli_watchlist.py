@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from dependency_injector import providers
 from typer.testing import CliRunner
 
 import twitch_subs.container as container_mod
@@ -23,6 +24,7 @@ from twitch_subs.domain.events import (
 )
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.domain.models import BroadcasterType
+from twitch_subs.config import Settings
 
 
 class DummyAiogramBot:
@@ -122,10 +124,14 @@ def test_remove_emits_user_removed_event(
     db = tmp_path / "wl.db"
     stub_bus = StubEventBus()
 
-    def fake_event_bus(self: container_mod.Container) -> StubEventBus:
-        return stub_bus
+    async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
+        container = container_mod.AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.event_bus.override(providers.Object(stub_bus))
+        container.settings.override(providers.Object(settings))
+        return container
 
-    monkeypatch.setattr(container_mod.Container, "event_bus", property(fake_event_bus))
+    monkeypatch.setattr(cli, "build_container", fake_build_container)
 
     add_res = run(["add", "foo"], monkeypatch, db)
     assert add_res.exit_code == 0
@@ -160,7 +166,7 @@ async def test_register_notification_handlers_sends_messages() -> None:
 
     class FakeRepo:
         def get_sub_state(self, login: str) -> Any:
-            return None
+            return SimpleNamespace(status=BroadcasterType.NONE)
 
     bus = StubEventBus()
     notifier = FakeNotifier()

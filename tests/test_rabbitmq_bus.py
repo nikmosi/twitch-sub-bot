@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from twitch_subs.domain.events import UserAdded
-from twitch_subs.infra.events.rabbitmq_bus import (
+from twitch_subs.infrastructure.event_bus.rabbitmq import (
     RabbitMQEventBus,
     _serialize_event,
 )
@@ -135,10 +135,9 @@ async def test_start_binds_subscribed_handlers(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(bus, "_ensure_connection", fake_ensure_connection)
     monkeypatch.setattr(bus, "_ensure_consumer", fake_ensure_consumer)
 
-    await bus.start()
-
-    assert queue.bindings == [(exchange, "domain.user.added")]
-    assert bus._consumer_tag == "consumer-tag"
+    async with bus:
+        assert queue.bindings == [(exchange, "domain.user.added")]
+        assert bus._consumer_tag == "consumer-tag"
 
 
 @pytest.mark.asyncio
@@ -154,7 +153,7 @@ async def test_stop_closes_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     bus._consume_channel = channel
     bus._connection = connection
 
-    await bus.stop()
+    await bus.__aexit__(None, None, None)
 
     assert queue.cancelled == ["tag"]
     assert channel.closed

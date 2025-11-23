@@ -75,8 +75,8 @@ class StubCron:
 async def test_collector_sends_report_and_resets() -> None:
     repo = StubRepo(
         [
-            SubState("foo", True, tier=BroadcasterType.AFFILIATE.value, since=None),
-            SubState("bar", False, tier=None, since=None),
+            SubState("foo", BroadcasterType.AFFILIATE, tier=BroadcasterType.AFFILIATE.value, since=None),
+            SubState("bar", BroadcasterType.NONE, tier=None, since=None),
         ]
     )
     notifier = StubNotifier()

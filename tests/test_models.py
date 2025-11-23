@@ -1,5 +1,8 @@
 import pytest
 
+import pytest
+from pydantic import ValidationError
+
 from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
@@ -12,26 +15,25 @@ def test_login_report_info_accepts_enum_and_str() -> None:
     str_info = LoginReportInfo("foo", BroadcasterType.PARTNER.value)
 
     assert enum_info == str_info
-    assert enum_info.tier == BroadcasterType.PARTNER.value
+    assert enum_info.broadcaster == BroadcasterType.PARTNER
     assert enum_info.broadcaster is BroadcasterType.PARTNER
 
 
 def test_login_report_info_none_defaults_to_none() -> None:
-    info = LoginReportInfo("bar", None)
-    assert info.broadcaster is BroadcasterType.NONE
-    assert info.tier is None
+    with pytest.raises(ValidationError):
+        LoginReportInfo("bar", None)
 
 
 @pytest.mark.parametrize(
     "raw_status, tier, expected_type, expected_tier",
     [
-        (True, BroadcasterType.AFFILIATE.value, BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value),
-        (False, None, BroadcasterType.NONE, None),
-        (True, "invalid", BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value),
+        (BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value, BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE.value),
+        (BroadcasterType.NONE, None, BroadcasterType.NONE, None),
+        ("partner", None, BroadcasterType.PARTNER, None),
     ],
 )
 def test_sub_state_normalizes_inputs(
-    raw_status: bool, tier: str | None, expected_type: BroadcasterType, expected_tier: str | None
+    raw_status: BroadcasterType | str, tier: str | None, expected_type: BroadcasterType, expected_tier: str | None
 ) -> None:
     state = SubState("foo", raw_status, tier=tier)
 
@@ -40,7 +42,12 @@ def test_sub_state_normalizes_inputs(
     assert state.is_subscribed is expected_type.is_subscribable()
 
 
+def test_sub_state_rejects_boolean_status() -> None:
+    with pytest.raises(ValidationError):
+        SubState("foo", True, tier="affiliate")
+
+
 def test_sub_state_accepts_string_status() -> None:
     state = SubState("foo", "partner")
     assert state.status is BroadcasterType.PARTNER
-    assert state.tier == BroadcasterType.PARTNER.value
+    assert state.tier is None
