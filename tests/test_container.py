@@ -9,7 +9,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from dependency_injector import providers
 
 from twitch_subs.config import Settings
-from twitch_subs.container import AppContainer, build_container, shutdown_container
+from twitch_subs.container import AppContainer, shutdown_container
 
 
 @dataclass
