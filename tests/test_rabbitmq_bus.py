@@ -121,43 +121,40 @@ async def test_publish_uses_exchange(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_start_binds_subscribed_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
     bus = RabbitMQEventBus("amqp://example")
-    queue = StubQueue("events")
-    exchange = StubExchange()
-
-    async def fake_ensure_connection() -> None:
-        return None
-
-    async def fake_ensure_consumer() -> None:
-        bus._queue = queue
-        bus._consume_exchange = exchange
+    channel = StubChannel()
+    connection = StubConnection(channel)
+    bus._connection = connection
 
     bus.subscribe(UserAdded, lambda _: None)
-    monkeypatch.setattr(bus, "_ensure_connection", fake_ensure_connection)
-    monkeypatch.setattr(bus, "_ensure_consumer", fake_ensure_consumer)
 
-    async with bus:
-        assert queue.bindings == [(exchange, "domain.user.added")]
-        assert bus._consumer_tag == "consumer-tag"
+    await bus.start()
+
+    assert bus._queue is not None
+    assert bus._consume_exchange is channel.exchange
+    assert bus._queue.bindings == [(channel.exchange, "domain.user.added")]
+    assert bus._consumer_tag == "consumer-tag"
 
 
 @pytest.mark.asyncio
 async def test_stop_closes_resources(monkeypatch: pytest.MonkeyPatch) -> None:
     bus = RabbitMQEventBus("amqp://example")
-    queue = StubQueue("events")
     channel = StubChannel()
     connection = StubConnection(channel)
 
-    bus._queue = queue
-    bus._consumer_tag = "tag"
-    bus._publish_channel = channel
-    bus._consume_channel = channel
     bus._connection = connection
+    bus.subscribe(UserAdded, lambda _: None)
+
+    await bus.start()
+    await bus.publish(UserAdded(login="carol"))
+
+    assert bus._queue is not None
+    queue = bus._queue
 
     await bus.__aexit__(None, None, None)
 
-    assert queue.cancelled == ["tag"]
+    assert queue.cancelled == ["consumer-tag"]
     assert channel.closed
-    assert connection.closed
+    assert bus._consumer_tag is None
 
 
 @pytest.mark.asyncio

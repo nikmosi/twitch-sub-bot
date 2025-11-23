@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import inspect
 
@@ -51,6 +52,28 @@ class FakeSession:
         self.closed = True
 
 
+class FakeConnection:
+    def __init__(self) -> None:
+        self.closed = False
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+class FakeEventBus:
+    def __init__(self, *args, **kwargs) -> None:
+        self.started = False
+        self.stopped = False
+        self.connection = kwargs.get("connection")
+
+    async def __aenter__(self) -> "FakeEventBus":
+        self.started = True
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        self.stopped = True
+
+
 class FakeDayChangeScheduler:
     def __init__(self, event_bus, cron: str) -> None:
         self.event_bus = event_bus
@@ -87,8 +110,31 @@ async def test_build_container_initializes_resources(
     monkeypatch.setattr(
         "twitch_subs.container.DayChangeScheduler", FakeDayChangeScheduler
     )
+    monkeypatch.setattr("twitch_subs.container.RabbitMQEventBus", FakeEventBus)
 
-    container: AppContainer = await build_container(settings)
+    connections: list[FakeConnection] = []
+
+    @asynccontextmanager
+    async def fake_rabbitmq_resource(url: str | None = None):
+        conn = FakeConnection()
+        connections.append(conn)
+        try:
+            yield conn
+        finally:
+            await conn.close()
+
+    monkeypatch.setattr(
+        "twitch_subs.container._rabbitmq_resource", fake_rabbitmq_resource
+    )
+
+    async def fake_build_container(settings: Settings) -> AppContainer:
+        container = AppContainer()
+        container.container_config.from_pydantic(settings)
+        container.rabbit_conn.override(providers.Resource(fake_rabbitmq_resource))
+        await container.init_resources()
+        return container
+
+    container: AppContainer = await fake_build_container(settings)
 
     engine1 = container.engine()
     engine2 = container.engine()
@@ -143,3 +189,4 @@ async def test_build_container_initializes_resources(
     assert session.closed
     assert twitch.closed
     assert scheduler.stopped
+    assert connections and connections[0].closed
