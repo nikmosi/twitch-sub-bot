@@ -1,22 +1,94 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from itertools import batched
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
 
+from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
+from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
 
 from .filters import IDFilter
+
+
+def to_usernames(text: str) -> list[str]:
+    res: list[str] = []
+    for i in text.split(" "):
+        res.append(i.strip())
+
+    return res
+
+
+@dataclass(slots=True, frozen=True, kw_only=True)
+class Commands:
+    service: WatchlistService
+
+    # ----- pure helpers used by handlers and tests -----
+    def add(self, usernames: list[str]) -> list[DomainEvent]:
+        events: list[DomainEvent] = []
+        for username in usernames:
+            if not self.service.add(username):
+                events.append(
+                    UserError(login=username, exception="{username} already present")
+                )
+            else:
+                events.append(UserAdded(login=username))
+        return events
+
+    def remove(self, usernames: list[str]) -> list[DomainEvent]:
+        events: list[DomainEvent] = []
+        for username in usernames:
+            if self.service.remove(username):
+                events.append(UserRemoved(login=f"Removed {username}"))
+            else:
+                events.append(
+                    UserError(login=username, exception=f"{username} not found")
+                )
+        return events
+
+    def _create_users_list(self) -> list[str]:
+        users = self.service.list()
+        text: list[str] = []
+        for login in users:
+            text.append(f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>')
+        return text
+
+    def get_list(self) -> str:
+        text = ["📊 <b>List</b>"]
+        text.append("")
+        users = self._create_users_list()
+        if users:
+            return "\n".join(text + users)
+        return "Watchlist is empty"
+
+    def handle_command(self, text: str) -> list[DomainEvent] | str:
+        parts = text.strip().split(maxsplit=1)
+        cmd = parts[0]
+        arg = parts[1].strip() if len(parts) > 1 else None
+        if cmd == "/add" and arg:
+            return self.add(to_usernames(arg))
+        if cmd == "/remove" and arg:
+            return self.remove(to_usernames(arg))
+        if cmd == "/list" and not arg:
+            return self.get_list()
+        return "Unknown command"
+
+    pass
 
 
 class TelegramWatchlistBot:
     """Telegram bot to manage the watchlist using aiogram."""
 
-    def __init__(self, bot: Bot, chat_id: str, service: WatchlistService) -> None:
+    def __init__(
+        self, bot: Bot, chat_id: str, service: WatchlistService, event_bus: EventBus
+    ) -> None:
         self.service = service
+        self.bus = event_bus
+        self.commands = Commands(service=service)
         self.bot = bot
         self.dispatcher = Dispatcher()
 
@@ -31,67 +103,36 @@ class TelegramWatchlistBot:
             self._cmd_list, Command("list"), IDFilter(chat_id)
         )
 
-    # ----- pure helpers used by handlers and tests -----
-    def _handle_add(self, username: str) -> str:
-        if not self.service.add(username):
-            return f"{username} already present"
-        return f"Added {username}"
-
-    def _handle_remove(self, username: str) -> str:
-        if self.service.remove(username):
-            return f"Removed {username}"
-        return f"{username} not found"
-
-    def _create_users_list(self) -> list[str]:
-        users = self.service.list()
-        text: list[str] = []
-        for login in users:
-            text.append(f'• <a href="https://www.twitch.tv/{login}">{login:<10}</a>')
-        return text
-
-    def _handle_list(self) -> str:
-        text = ["📊 <b>List</b>"]
-        text.append("")
-        users = self._create_users_list()
-        if users:
-            return "\n".join(text + users)
-        return "Watchlist is empty"
-
-    def handle_command(self, text: str) -> str:
-        parts = text.strip().split(maxsplit=1)
-        cmd = parts[0]
-        arg = parts[1].strip() if len(parts) > 1 else None
-        if cmd == "/add" and arg:
-            return self._handle_add(arg)
-        if cmd == "/remove" and arg:
-            return self._handle_remove(arg)
-        if cmd == "/list" and not arg:
-            return self._handle_list()
-        return "Unknown command"
-
     # ----- aiogram command handlers -----
     async def _cmd_add(self, message: types.Message) -> None:
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) < 2:
-            await message.answer("Usage: /add <username>")
+            await message.answer("Usage: /add <username>...")
             return
-        await message.answer(self._handle_add(parts[1].strip()))
+        arg = parts[1].strip()
+        events = self.commands.add(to_usernames(arg))
+        await self.bus.publish(*events)
 
     async def _cmd_remove(self, message: types.Message) -> None:
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) < 2:
-            await message.answer("Usage: /remove <username>")
+            await message.answer("Usage: /remove <username>...")
             return
-        await message.answer(self._handle_remove(parts[1].strip()))
+        arg = parts[1].strip()
+        events = self.commands.remove(to_usernames(arg))
+        await self.bus.publish(*events)
 
     async def _cmd_list(self, message: types.Message) -> None:
-        ans = self._handle_list().split("\n")
+        ans = self.commands.get_list().split("\n")
         for batch in batched(ans, n=100):
             await message.answer(
                 "\n".join(batch),
                 parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True,
             )
+
+    def handle_command(self, text: str) -> list[DomainEvent] | str:
+        return self.commands.handle_command(text)
 
     async def run(self) -> None:
         try:
