@@ -1,24 +1,32 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from dataclasses import dataclass
 from itertools import batched
 
 from aiogram import Bot, Dispatcher, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
+from loguru import logger
 
 from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
+from twitch_subs.infrastructure.error import CantExtractNicknama
 
 from .filters import IDFilter
 
 
 def to_usernames(text: str) -> list[str]:
     res: list[str] = []
+    pattern = r"^(?:https?://(?:www\.)?twitch\.tv/)?([^/\s]+)"
     for i in text.split(" "):
-        res.append(i.strip())
+        match_ = re.search(pattern, i)
+        if not match_:
+            raise CantExtractNicknama(nickname=i)
+        nickname = match_.group(1)
+        res.append(nickname)
 
     return res
 
@@ -110,8 +118,14 @@ class TelegramWatchlistBot:
             await message.answer("Usage: /add <username>...")
             return
         arg = parts[1].strip()
-        events = self.commands.add(to_usernames(arg))
-        await self.bus.publish(*events)
+        try:
+            usernames = to_usernames(arg)
+        except CantExtractNicknama as e:
+            logger.opt(exception=e).warning(e.message())
+            await self.bus.publish(UserError(login=e.nickname, exception=e.message()))
+        else:
+            events = self.commands.add(usernames)
+            await self.bus.publish(*events)
 
     async def _cmd_remove(self, message: types.Message) -> None:
         parts = (message.text or "").split(maxsplit=1)
@@ -119,8 +133,14 @@ class TelegramWatchlistBot:
             await message.answer("Usage: /remove <username>...")
             return
         arg = parts[1].strip()
-        events = self.commands.remove(to_usernames(arg))
-        await self.bus.publish(*events)
+        try:
+            usernames = to_usernames(arg)
+        except CantExtractNicknama as e:
+            logger.opt(exception=e).warning(e.message())
+            await self.bus.publish(UserError(login=e.nickname, exception=e.message()))
+        else:
+            events = self.commands.remove(usernames)
+            await self.bus.publish(*events)
 
     async def _cmd_list(self, message: types.Message) -> None:
         ans = self.commands.get_list().split("\n")

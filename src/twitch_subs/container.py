@@ -188,6 +188,7 @@ class AppContainer(containers.DeclarativeContainer):
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,
         service=watchlist_service,
+        event_bus=event_bus,
     )
 
 
