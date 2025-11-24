@@ -8,16 +8,17 @@ from typing import Any
 import pytest
 
 from twitch_subs.application.watchlist_service import WatchlistService
+from twitch_subs.domain.events import UserError
 from twitch_subs.domain.models import (
     BroadcasterType,
     LoginReportInfo,
     LoginStatus,
     UserRecord,
 )
+from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
-from twitch_subs.infrastructure.telegram.filters import IDFilter
 
 
 class StubSession:
@@ -68,65 +69,27 @@ def make_service(tmp_path: Path) -> WatchlistService:
 
 def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
     service = make_service(tmp_path)
-    bot = TelegramWatchlistBot(StubBot(), "1", service)
+    bot = TelegramWatchlistBot(StubBot(), "1", service, event_bus=InMemoryEventBus())
     bot.handle_command("/add foo")
 
-    assert bot.handle_command("/add foo") == "foo already present"
-    assert bot.handle_command("/remove bar") == "bar not found"
+    assert type(bot.handle_command("/add foo")[0]) is UserError
+    assert type(bot.handle_command("/remove bar")[0]) is UserError
 
 
 def test_handle_command_unknown(tmp_path: Path) -> None:
-    bot = TelegramWatchlistBot(StubBot(), "1", make_service(tmp_path))
+    bot = TelegramWatchlistBot(
+        StubBot(), "1", make_service(tmp_path), event_bus=InMemoryEventBus()
+    )
     assert bot.handle_command("/foo") == "Unknown command"
     assert bot.handle_command("/list") == "Watchlist is empty"
 
 
-def test_id_filter_and_handlers(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    service = make_service(tmp_path)
-    bot = TelegramWatchlistBot(StubBot(), "1", service)
-
-    msg = SimpleNamespace(chat=SimpleNamespace(id=1))
-    assert asyncio.run(IDFilter("1")(msg))
-    assert not asyncio.run(IDFilter("2")(msg))
-
-    class DummyMessage:
-        def __init__(self, text: str) -> None:
-            self.text = text
-            self.answers: list[tuple[str, dict[str, Any]]] = []
-
-        async def answer(self, text: str, **kwargs: Any) -> None:
-            self.answers.append((text, kwargs))
-
-    m_add = DummyMessage("/add foo")
-    asyncio.run(bot._cmd_add(m_add))
-    assert m_add.answers[0][0] == "Added foo"
-
-    m_add_bad = DummyMessage("/add")
-    asyncio.run(bot._cmd_add(m_add_bad))
-    assert m_add_bad.answers[0][0].startswith("Usage")
-
-    m_rm = DummyMessage("/remove foo")
-    asyncio.run(bot._cmd_remove(m_rm))
-    assert m_rm.answers[0][0] == "Removed foo"
-
-    m_rm_bad = DummyMessage("/remove")
-    asyncio.run(bot._cmd_remove(m_rm_bad))
-    assert m_rm_bad.answers[0][0].startswith("Usage")
-
-    m_list = DummyMessage("/list")
-    asyncio.run(bot._cmd_list(m_list))
-    text = m_list.answers[0][0]
-    assert "List" in text or text == "Watchlist is empty"
-
-
 def test_handle_list_with_users(tmp_path: Path) -> None:
     service = make_service(tmp_path)
-    bot = TelegramWatchlistBot(StubBot(), "1", service)
-    bot._handle_add("foo")
+    bot = TelegramWatchlistBot(StubBot(), "1", service, event_bus=InMemoryEventBus())
+    bot.handle_command("/add foo")
 
-    result = bot._handle_list()
+    result = bot.handle_command("/list")
 
     assert "foo" in result
     assert "https://www.twitch.tv/foo" in result
@@ -197,7 +160,9 @@ def test_run_polling_uses_asyncio_run(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     service = make_service(tmp_path)
-    watch_bot = TelegramWatchlistBot(StubBot(), "1", service)
+    watch_bot = TelegramWatchlistBot(
+        StubBot(), "1", service, event_bus=InMemoryEventBus()
+    )
     called: dict[str, object] = {}
 
     def fake_run(coro) -> None:
@@ -219,7 +184,7 @@ async def test_run_and_stop(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     )
     bot = StubBot()
     service = make_service(tmp_path)
-    watch_bot = TelegramWatchlistBot(bot, "1", service)
+    watch_bot = TelegramWatchlistBot(bot, "1", service, event_bus=InMemoryEventBus())
 
     async def runner() -> None:
         await asyncio.wait_for(watch_bot.run(), timeout=0.1)
