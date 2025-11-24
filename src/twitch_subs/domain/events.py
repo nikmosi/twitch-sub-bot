@@ -50,6 +50,11 @@ class OnceChecked(DomainEvent):
     current_state: BroadcasterType
 
 
+class UserError(DomainEvent):
+    login: str
+    exception: str
+
+
 class UserAdded(DomainEvent):
     login: str
 
