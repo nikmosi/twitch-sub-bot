@@ -27,3 +27,11 @@ class CantGetCurrentEventLoop(InfraError):
     @override
     def message(self) -> str:
         return "Can't get event loop."
+
+
+@dataclass
+class CantExtractNicknama(InfraError):
+    nickname: str
+
+    def message(self) -> str:
+        return f"Can't extract nickname from {self.nickname}"
