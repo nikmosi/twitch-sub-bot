@@ -22,6 +22,8 @@ from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.event_bus import RabbitMQEventBus
+from twitch_subs.infrastructure.event_bus.rabbitmq.consumer import Consumer
+from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
@@ -78,17 +80,10 @@ def _bot_resource(token: str, session: AiohttpSession) -> Bot:
 
 @asynccontextmanager
 async def _rabbit_event_bus_resource(
-    connection: AbstractRobustConnection,
-    exchange: str,
-    queue_name: str,
-    prefetch_count: int,
+    producer: Producer,
+    consumer: Consumer,
 ) -> AsyncIterator[EventBus]:
-    bus: EventBus = RabbitMQEventBus(
-        connection=connection,
-        exchange=exchange,
-        queue_name=queue_name,
-        prefetch_count=prefetch_count,
-    )
+    bus: EventBus = RabbitMQEventBus(producer=producer, consumer=consumer)
     async with bus:
         yield bus
 
@@ -117,6 +112,36 @@ async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection
         yield connection
     finally:
         await connection.close()
+
+
+@asynccontextmanager
+async def _create_consumer(
+    connection: AbstractRobustConnection,
+    exchange: str = "twitch_subs.events",
+    queue_name: str | None = None,
+    prefetch_count: int = 10,
+    dedup_capacity: int = 1024,
+    stop_timeout: int = 5,
+) -> AsyncIterator[Consumer]:
+    consumer = Consumer(
+        connection=connection,
+        exchange=exchange,
+        queue_name=queue_name,
+        prefetch_count=prefetch_count,
+        dedup_capacity=dedup_capacity,
+        stop_timeout=stop_timeout,
+    )
+    async with consumer:
+        yield consumer
+
+
+@asynccontextmanager
+async def _create_producer(
+    connection: AbstractRobustConnection, exchange_name: str = "twitch_subs.events"
+) -> AsyncIterator[Producer]:
+    producer = Producer(connection=connection, exchange_name=exchange_name)
+    async with producer:
+        yield producer
 
 
 # ---------- DI container ----------
@@ -161,13 +186,19 @@ class AppContainer(containers.DeclarativeContainer):
     notifier: providers.Singleton[NotifierProtocol] = providers.Singleton(
         TelegramNotifier, bot=telegram_bot, chat_id=container_config.telegram_chat_id
     )
-    # Event bus (async resource to ensure graceful stop)
-    event_bus = providers.Resource(
-        _rabbit_event_bus_resource,
+    consumer = providers.Resource(
+        _create_consumer,
         connection=rabbit_conn,
         exchange=container_config.rabbitmq_exchange,
         queue_name=container_config.rabbitmq_queue,
         prefetch_count=container_config.rabbitmq_prefetch.as_int(),
+    )
+    producer = providers.Resource(_create_producer, connection=rabbit_conn)
+    # Event bus (async resource to ensure graceful stop)
+    event_bus = providers.Resource(
+        _rabbit_event_bus_resource,
+        consumer=consumer,
+        producer=producer,
     )
     # Day change scheduler (autostart on init_resources, stop on shutdown_resources)
     day_scheduler = providers.Resource(

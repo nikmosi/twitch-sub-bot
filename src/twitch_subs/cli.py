@@ -22,6 +22,7 @@ from twitch_subs.application.ports import (
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserAdded, UserRemoved
+from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
 
@@ -81,7 +82,7 @@ async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
 async def _add(
     usernames: list[str],
     notify: bool,
-    bus: EventBus = Provide[AppContainer.event_bus],
+    producer: Producer = Provide[AppContainer.producer],
     service: WatchlistService = Provide[AppContainer.watchlist_service],
 ) -> int:
     pending_events: list[UserAdded] = []
@@ -95,7 +96,7 @@ async def _add(
             if notify:
                 pending_events.append(UserAdded(login=username))
     if pending_events:
-        await bus.publish(*pending_events)
+        await producer.publish(*pending_events)
     return 0
 
 
@@ -117,7 +118,7 @@ async def _remove(
     usernames: list[str],
     quiet: bool,
     notify: bool,
-    bus: EventBus = Provide[AppContainer.event_bus],
+    producer: Producer = Provide[AppContainer.producer],
     service: WatchlistService = Provide[AppContainer.watchlist_service],
 ) -> int:
     pending_events: list[UserRemoved] = []
@@ -134,7 +135,7 @@ async def _remove(
             typer.echo(f"{username} not found", err=True)
             raise typer.Exit(1)
     if pending_events:
-        await bus.publish(*pending_events)
+        await producer.publish(*pending_events)
     return 0
 
 
