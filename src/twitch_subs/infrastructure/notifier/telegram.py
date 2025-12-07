@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from itertools import batched
+from itertools import batched, groupby
 
 from aiogram import Bot
 from loguru import logger
@@ -52,12 +52,13 @@ class TelegramNotifier(NotifierProtocol):
         text.append(f"Checks: <b>{checks}</b>")
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
-        for info in sorted(states, key=lambda item: item.login):
-            broadcaster = info.broadcaster
-            text.append(
-                f"• <b>{broadcaster.value:>8}</b> "
-                f'<a href="https://www.twitch.tv/{info.login}">{info.login}</a>'
-            )
+        sorted_states = sorted(states, key=lambda state: state.broadcaster)
+        for key, group in groupby(sorted_states, key=lambda state: state.broadcaster):
+            text.append(f"• <b>{key}</b> ")
+            for info in sorted(group, key=lambda item: item.login):
+                text.append(
+                    f' <a href="https://www.twitch.tv/{info.login}">{info.login}</a>'
+                )
         for batch in batched(text, n=100):
             await self.send_message("\n".join(batch), disable_notification=True)
 
