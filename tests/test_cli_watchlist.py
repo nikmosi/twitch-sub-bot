@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 from contextlib import asynccontextmanager
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,18 +13,18 @@ from typer.testing import CliRunner
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.event_handlers import register_notification_handlers
+from twitch_subs.config import Settings
 from twitch_subs.domain.events import (
     DayChanged,
-    LoopCheckFailed,
     LoopChecked,
+    LoopCheckFailed,
     OnceChecked,
     UserAdded,
     UserBecomeSubscribtable,
     UserRemoved,
 )
-from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.domain.models import BroadcasterType
-from twitch_subs.config import Settings
+from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 
 
 class DummyAiogramBot:
@@ -77,7 +77,7 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         container.container_config.from_pydantic(settings)
 
         container.rabbit_conn.override(providers.Resource(_yield, object()))
-        container.event_bus.override(providers.Resource(_yield, stub_bus))
+        container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
         container.day_scheduler.override(providers.Resource(_yield, None))
         container.settings.override(providers.Object(settings))
 
@@ -154,7 +154,7 @@ def test_remove_emits_user_removed_event(
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
-        container.event_bus.override(providers.Object(stub_bus))
+        container.event_bus_factory.override(providers.Object(stub_bus))
         container.settings.override(providers.Object(settings))
         return container
 
