@@ -87,7 +87,6 @@ class Consumer:
                 log_and_wrap(
                     exc,
                     ConsumerStopError,
-                    LOGGER,
                     context={"stage": "quick_cleanup", "exc_type": type(exc).__name__},
                 )
             return
@@ -143,7 +142,6 @@ class Consumer:
                     log_and_wrap(
                         e,
                         ConsumerStopError,
-                        LOGGER,
                         context={"stage": "queue_cancel", "exc_type": type(e).__name__},
                     )
                 finally:
@@ -165,8 +163,10 @@ class Consumer:
                     log_and_wrap(
                         e,
                         ConsumerStopError,
-                        LOGGER,
-                        context={"stage": "channel_close", "exc_type": type(e).__name__},
+                        context={
+                            "stage": "channel_close",
+                            "exc_type": type(e).__name__,
+                        },
                     )
                 finally:
                     self._channel = None
