@@ -30,37 +30,16 @@ class RabbitMQEventBus(EventBus):
     # ========== API как раньше ==========
 
     def subscribe(self, event_type: type[T], handler: Handler[T]) -> None:
-        """
-        Сохраняем старую сигнатуру: подписка на тип события.
-        """
         self._consumer.subscribe(event_type, handler)
 
     async def publish(self, *events: DomainEvent) -> None:
-        """
-        Старая сигнатура publish — теперь просто делегирует в Producer.
-        """
         await self._producer.publish(*events)
 
     async def start(self) -> None:
-        """
-        Запуск и продюсера, и консюмера.
-
-        Если где-то в коде раньше делали:
-            bus = RabbitMQEventBus(...)
-            await bus.start()
-        — это продолжит работать.
-        """
-        # продюсер можно не стартовать, но пусть будет симметрия
         await self._producer.start()
         await self._consumer.start()
 
     async def stop(self) -> None:
-        """
-        Остановка консюмера и продюсера.
-
-        Сначала гасим consumer (чтобы не таскать новые сообщения),
-        потом продюсер.
-        """
         try:
             await self._consumer.stop()
         finally:
@@ -78,18 +57,8 @@ class RabbitMQEventBus(EventBus):
         exc: BaseException | None,
         tb: TracebackType | None,
     ) -> None:
-        """
-        Для сохранения поведения:
-        - прокидываем exit в consumer (там уже есть спец-логика под GeneratorExit)
-        - после этого останавливаем producer.
-        """
         try:
-            # отдаём право первой ночи консюмеру — у него более тонкая логика stop/closing
-            try:
-                await self._consumer.__aexit__(exc_type, exc, tb)
-            except AttributeError:
-                # на случай, если Consumer не реализует __aexit__ (например, его упростили)
-                await self._consumer.stop()
+            await self._consumer.stop()
         finally:
             try:
                 await self._producer.stop()
