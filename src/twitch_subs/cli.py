@@ -23,6 +23,8 @@ from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserAdded, UserRemoved
+from twitch_subs.infrastructure.error import InfraError
+from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
@@ -60,6 +62,15 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     return names
 
 
+@contextlib.asynccontextmanager
+async def _ensure_async_cm(obj: AsyncContextManager[Any] | Any):
+    if hasattr(obj, "__aenter__") and hasattr(obj, "__aexit__"):
+        async with obj as value:
+            yield value
+    else:
+        yield obj
+
+
 async def run_watch(
     watcher: Watcher,
     repo: WatchlistRepository,
@@ -73,7 +84,7 @@ async def run_bot(
     bot_cm: AsyncContextManager[TelegramWatchlistBot], stop: asyncio.Event
 ) -> None:
     """Run Telegram bot until *stop* is set."""
-    async with bot_cm as bot:
+    async with _ensure_async_cm(bot_cm) as bot:
         task = asyncio.create_task(bot.run(), name="telegram-bot")
         try:
             await stop.wait()
@@ -210,12 +221,16 @@ def watch(
     ) -> int:
         logins = repo.list()
 
-        async with event_bus_factory as event_bus, watcher_factory as watcher:
+        async with _ensure_async_cm(event_bus_factory) as event_bus, _ensure_async_cm(
+            watcher_factory
+        ) as watcher:
             scheduler = DayChangeScheduler(
                 event_bus=event_bus, cron=settings.report_cron
             )
 
-            register_notification_handlers(event_bus, notifier, sub_state_repo)
+            register_notification_handlers(
+                event_bus, notifier, sub_state_repo, logger=logger
+            )
 
             logger.info(
                 f"Starting watch for logins {', '.join(logins)} with interval {interval}"
@@ -243,19 +258,25 @@ def watch(
             for task in tasks:
                 task.add_done_callback(handle_task_result)
 
-            exit_code = 0
             try:
                 scheduler.start()
                 await wait_stop(settings.task_timeout)
                 logger.debug("shutdown")
                 if task_errors:
-                    exit_code = 1
+                    raise InfraError(
+                        "Worker tasks failed",
+                        context={"errors": [repr(err) for err in task_errors]},
+                    )
             except Exception as exc:  # pragma: no cover - defensive logging
-                logger.opt(exception=exc).exception("Worker crashed")
-                exit_code = 1
+                log_and_wrap(
+                    exc,
+                    InfraError,
+                    logger,
+                    context={"tasks": [t.get_name() for t in tasks]},
+                )
             finally:
                 scheduler.stop()
-            return exit_code
+            return 0
 
     raise typer.Exit(asyncio.run(entry_point(main())))
 

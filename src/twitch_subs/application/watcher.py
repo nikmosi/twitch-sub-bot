@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timezone
-
-from loguru import logger
+from typing import Any
 
 from twitch_subs.application.logins import LoginsProvider
+from twitch_subs.application.error import WatcherRunError
 from twitch_subs.domain.events import (
     LoopChecked,
     LoopCheckFailed,
@@ -32,11 +32,13 @@ class Watcher:
         notifier: NotifierProtocol,
         state_repo: SubscriptionStateRepo,
         event_bus: EventBus,
+        logger: Any | None = None,
     ) -> None:
         self.twitch = twitch
         self.notifier = notifier
         self.state_repo = state_repo
         self.event_bus = event_bus
+        self._logger = logger
 
     async def check_login(self, login: str) -> LoginStatus:
         user = await self.twitch.get_user_by_login(login)
@@ -89,14 +91,17 @@ class Watcher:
                 try:
                     await self.run_once(all_logins, stop_event)
                 except Exception as e:
-                    logger.opt(exception=e).exception("Run once failed")
+                    if self._logger:
+                        self._logger.exception("Run once failed: %s", e)
                     await self.event_bus.publish(
                         LoopCheckFailed(logins=tuple(all_logins), error=str(e))
                     )
+                    raise WatcherRunError(tuple(all_logins), e) from e
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)
                 except TimeoutError:
                     pass
         finally:
-            logger.info("notify_about_stop")
+            if self._logger:
+                self._logger.info("notify_about_stop")
             await asyncio.shield(self.notifier.notify_about_stop())
