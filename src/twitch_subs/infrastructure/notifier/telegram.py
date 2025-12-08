@@ -78,4 +78,4 @@ class TelegramNotifier(NotifierProtocol):
             )
         except Exception as e:
             logger.opt(exception=e).exception("Telegram send failed")
-            raise AsyncTelegramNotifyError(e) from e
+            raise AsyncTelegramNotifyError(exception=e) from e
