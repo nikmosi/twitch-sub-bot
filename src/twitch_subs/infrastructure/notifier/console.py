@@ -84,5 +84,5 @@ class ConsoleNotifier(NotifierProtocol):
         except Exception as e:
             logger.opt(exception=e).exception("Console notify failed")
             raise NotificationDeliveryError(
-                "Console notification failed", context={"error": repr(e)}
+                message="Console notification failed", context={"error": repr(e)}
             ) from e
