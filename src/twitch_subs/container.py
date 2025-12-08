@@ -1,9 +1,8 @@
 # container_di.py
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncIterator, Awaitable, Iterator
+from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection
@@ -17,8 +16,9 @@ from sqlalchemy import Engine, create_engine, text
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
+    SubscriptionStateRepo,
+    TwitchClientProtocol,
 )
-from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.event_bus import RabbitMQEventBus
@@ -69,15 +69,6 @@ async def _twitch_client_resource(creds: TwitchAppCreds) -> AsyncIterator[Twitch
         await client.aclose()
 
 
-def _bot_resource(token: str, session: AiohttpSession) -> Bot:
-    bot = Bot(
-        token=token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        session=session,
-    )
-    return bot
-
-
 @asynccontextmanager
 async def _rabbit_event_bus_resource(
     producer: Producer,
@@ -86,23 +77,6 @@ async def _rabbit_event_bus_resource(
     bus: EventBus = RabbitMQEventBus(producer=producer, consumer=consumer)
     async with bus:
         yield bus
-
-
-@asynccontextmanager
-async def _day_scheduler_resource(
-    bus: EventBus, cron: str
-) -> AsyncIterator[DayChangeScheduler]:
-    # гарантируем наличие event loop
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        raise RuntimeError("init_resources() must be called inside an async context")
-    scheduler = DayChangeScheduler(bus, cron=cron)
-    scheduler.start()
-    try:
-        yield scheduler
-    finally:
-        scheduler.stop()
 
 
 @asynccontextmanager
@@ -115,38 +89,35 @@ async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection
 
 
 @asynccontextmanager
-async def _create_consumer(
-    connection: AbstractRobustConnection,
-    exchange: str = "twitch_subs.events",
-    queue_name: str | None = None,
-    prefetch_count: int = 10,
-    dedup_capacity: int = 1024,
-    stop_timeout: int = 5,
-) -> AsyncIterator[Consumer]:
-    consumer = Consumer(
-        connection=connection,
-        exchange=exchange,
-        queue_name=queue_name,
-        prefetch_count=prefetch_count,
-        dedup_capacity=dedup_capacity,
-        stop_timeout=stop_timeout,
-    )
-    async with consumer:
-        yield consumer
+async def _create_watcher(
+    twitch: TwitchClientProtocol,
+    notifier: NotifierProtocol,
+    state_repo: SubscriptionStateRepo,
+    event_bus_fac: AsyncContextManager[EventBus],
+) -> AsyncIterator[Watcher]:
+    async with event_bus_fac as event_bus:
+        yield Watcher(
+            twitch=twitch, notifier=notifier, state_repo=state_repo, event_bus=event_bus
+        )
 
 
 @asynccontextmanager
-async def _create_producer(
-    connection: AbstractRobustConnection, exchange_name: str = "twitch_subs.events"
-) -> AsyncIterator[Producer]:
-    producer = Producer(connection=connection, exchange_name=exchange_name)
-    async with producer:
-        yield producer
+async def _create_telegram_watchlist_bot(
+    bot: Bot,
+    chat_id: str,
+    service: WatchlistService,
+    event_bus_fac: AsyncContextManager[EventBus],
+) -> AsyncIterator[TelegramWatchlistBot]:
+    async with event_bus_fac as event_bus:
+        yield TelegramWatchlistBot(
+            bot=bot,
+            chat_id=chat_id,
+            service=service,
+            event_bus=event_bus,
+        )
 
 
 # ---------- DI container ----------
-
-
 class AppContainer(containers.DeclarativeContainer):
     """Dependency Injector container for the app."""
 
@@ -181,45 +152,42 @@ class AppContainer(containers.DeclarativeContainer):
     # Telegram
     tg_session = providers.Resource(_aiohttp_session_resource)
     telegram_bot = providers.Resource(
-        _bot_resource, token=container_config.telegram_bot_token, session=tg_session
+        Bot,
+        token=container_config.telegram_bot_token,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=tg_session,
     )
     notifier: providers.Singleton[NotifierProtocol] = providers.Singleton(
         TelegramNotifier, bot=telegram_bot, chat_id=container_config.telegram_chat_id
     )
-    consumer = providers.Resource(
-        _create_consumer,
+    consumer = providers.Singleton(
+        Consumer,
         connection=rabbit_conn,
         exchange=container_config.rabbitmq_exchange,
         queue_name=container_config.rabbitmq_queue,
         prefetch_count=container_config.rabbitmq_prefetch.as_int(),
     )
-    producer = providers.Resource(_create_producer, connection=rabbit_conn)
-    # Event bus (async resource to ensure graceful stop)
-    event_bus = providers.Resource(
+    producer = providers.Singleton(Producer, connection=rabbit_conn)
+    event_bus_factory = providers.Factory(
         _rabbit_event_bus_resource,
         consumer=consumer,
         producer=producer,
     )
-    # Day change scheduler (autostart on init_resources, stop on shutdown_resources)
-    day_scheduler = providers.Resource(
-        _day_scheduler_resource, bus=event_bus, cron=container_config.report_cron
-    )
-
     # Application actors
     watcher = providers.Factory(
-        Watcher,
+        _create_watcher,
         twitch=twitch_client,
         notifier=notifier,
         state_repo=sub_state_repo,
-        event_bus=event_bus,
+        event_bus_fac=event_bus_factory,
     )
 
     bot_app = providers.Factory(
-        TelegramWatchlistBot,
+        _create_telegram_watchlist_bot,
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,
         service=watchlist_service,
-        event_bus=event_bus,
+        event_bus_fac=event_bus_factory,
     )
 
 

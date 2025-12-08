@@ -182,7 +182,7 @@ def test_watch_bot_exception_exitcode(
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
-        container.event_bus.override(providers.Object(stub_bus))
+        container.event_bus_factory.override(providers.Object(stub_bus))
         container.notifier.override(providers.Object(dummy_notifier))
         container.sub_state_repo.override(providers.Object(dummy_state_repo))
         container.watchlist_repo.override(providers.Object(dummy_repo))
@@ -326,7 +326,7 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
-        container.event_bus.override(providers.Object(stub_bus))
+        container.event_bus_factory.override(providers.Object(stub_bus))
         container.watchlist_repo.override(providers.Object(fake_repo))
         container.notifier.override(providers.Object(fake_notifier))
         container.sub_state_repo.override(providers.Object(fake_state_repo))
