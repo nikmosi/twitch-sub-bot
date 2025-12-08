@@ -6,7 +6,7 @@ import re
 import signal
 import sys
 from itertools import batched
-from typing import Any, AsyncContextManager, Awaitable, Sequence
+from typing import Any, AsyncContextManager, AsyncIterator, Awaitable, Sequence, TypeVar
 
 import typer
 from dependency_injector.wiring import Provide, inject
@@ -28,6 +28,8 @@ from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
 from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
 from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
+
+T = TypeVar("T")
 
 from .config import Settings
 from .container import AppContainer, build_container
@@ -72,10 +74,12 @@ async def run_watch(
 
 
 async def run_bot(
-    bot_cm: AsyncContextManager[TelegramWatchlistBot], stop: asyncio.Event
+    bot_cm: AsyncContextManager[TelegramWatchlistBot] | TelegramWatchlistBot,
+    stop: asyncio.Event,
 ) -> None:
     """Run Telegram bot until *stop* is set."""
-    async with bot_cm as bot:
+
+    async def _run(bot: TelegramWatchlistBot) -> None:
         task = asyncio.create_task(bot.run(), name="telegram-bot")
         try:
             await stop.wait()
@@ -83,6 +87,21 @@ async def run_bot(
             with contextlib.suppress(asyncio.CancelledError):
                 await bot.stop()
                 await task
+
+    if hasattr(bot_cm, "__aenter__") and hasattr(bot_cm, "__aexit__"):
+        async with bot_cm as bot:
+            await _run(bot)
+    else:
+        await _run(bot_cm)
+
+
+@contextlib.asynccontextmanager
+async def _use_async_resource(value: AsyncContextManager[T] | T) -> AsyncIterator[T]:
+    if hasattr(value, "__aenter__") and hasattr(value, "__aexit__"):
+        async with value as resolved:
+            yield resolved
+    else:
+        yield value  # type: ignore[misc]
 
 
 @inject
@@ -202,19 +221,21 @@ def watch(
     async def main(
         settings: Settings = Provide[AppContainer.settings],
         repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
-        event_bus_factory: AsyncContextManager[EventBus] = Provide[
-            AppContainer.event_bus_factory
-        ],
+        event_bus_factory: AsyncContextManager[EventBus]
+        | EventBus = Provide[AppContainer.event_bus_factory],
         notifier: NotifierProtocol = Provide[AppContainer.notifier],
         sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
-        watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
-        bot: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
+        watcher_factory: AsyncContextManager[Watcher]
+        | Watcher = Provide[AppContainer.watcher],
+        bot: AsyncContextManager[TelegramWatchlistBot]
+        | TelegramWatchlistBot = Provide[AppContainer.bot_app],
     ) -> int:
         logins = repo.list()
 
         async with (
-            event_bus_factory as event_bus,
-            watcher_factory as watcher,
+            _use_async_resource(event_bus_factory) as event_bus,
+            _use_async_resource(watcher_factory) as watcher,
+            _use_async_resource(bot) as bot_instance,
         ):
             scheduler = DayChangeScheduler(
                 event_bus=event_bus, cron=settings.report_cron
@@ -231,7 +252,9 @@ def watch(
             loop = asyncio.get_event_loop()
             loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-            bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
+            bot_task = loop.create_task(
+                run_bot(bot_instance, stop), name="run_bot"
+            )
             watcher_task = loop.create_task(
                 run_watch(watcher, repo, interval, stop), name="run_watch"
             )

@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 import time
+from dataclasses import dataclass
 from typing import Any
 
 import httpx
@@ -13,8 +15,14 @@ TWITCH_API = "https://api.twitch.tv"
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
 
 
+@dataclass(frozen=True, slots=True)
 class TwitchAuthError(RuntimeError):
     """Raised when Twitch credentials are missing."""
+
+    message: str
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.message
 
 
 class TwitchClient(TwitchClientProtocol):
