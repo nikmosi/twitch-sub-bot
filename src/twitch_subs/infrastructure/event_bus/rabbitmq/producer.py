@@ -67,7 +67,6 @@ class Producer:
                 log_and_wrap(
                     e,
                     ProducerCloseError,
-                    LOGGER,
                     context={"stage": "channel_close", "exc_type": type(e).__name__},
                 )
             finally:

@@ -11,9 +11,9 @@ from loguru import logger
 from twitch_subs.application.ports import EventBus, Handler
 from twitch_subs.domain.events import DomainEvent
 from twitch_subs.infrastructure.error import EventBusStopError
+from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.consumer import Consumer
 from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
-from twitch_subs.infrastructure.error_utils import log_and_wrap
 
 LOGGER = logger
 
@@ -70,6 +70,5 @@ class RabbitMQEventBus(EventBus):
                 log_and_wrap(
                     e,
                     EventBusStopError,
-                    LOGGER,
                     context={"stage": "producer_stop", "exc_type": type(e).__name__},
                 )

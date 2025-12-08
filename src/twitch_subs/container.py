@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, AsyncContextManager, AsyncIterator, Awaitable, Iterator
+from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection
@@ -97,18 +97,6 @@ async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection
 
 
 @asynccontextmanager
-async def _ensure_async_cm(obj: AsyncContextManager[Any] | Any):
-    try:
-        if hasattr(obj, "__aenter__") and hasattr(obj, "__aexit__"):
-            async with obj as value:
-                yield value
-        else:
-            yield obj
-    except GeneratorExit:
-        return
-
-
-@asynccontextmanager
 async def _create_watcher(
     twitch: TwitchClientProtocol,
     notifier: NotifierProtocol,
@@ -116,21 +104,12 @@ async def _create_watcher(
     event_bus_fac: AsyncContextManager[EventBus],
 ) -> AsyncIterator[Watcher]:
     try:
-        if hasattr(event_bus_fac, "__aenter__"):
-            async with _ensure_async_cm(event_bus_fac) as event_bus:
-                yield Watcher(
-                    twitch=twitch,
-                    notifier=notifier,
-                    state_repo=state_repo,
-                    event_bus=event_bus,
-                    logger=logger,
-                )
-        else:
+        async with event_bus_fac as event_bus:
             yield Watcher(
                 twitch=twitch,
                 notifier=notifier,
                 state_repo=state_repo,
-                event_bus=event_bus_fac,  # type: ignore[arg-type]
+                event_bus=event_bus,
                 logger=logger,
             )
     except GeneratorExit:
@@ -145,20 +124,12 @@ async def _create_telegram_watchlist_bot(
     event_bus_fac: AsyncContextManager[EventBus],
 ) -> AsyncIterator[TelegramWatchlistBot]:
     try:
-        if hasattr(event_bus_fac, "__aenter__"):
-            async with _ensure_async_cm(event_bus_fac) as event_bus:
-                yield TelegramWatchlistBot(
-                    bot=bot,
-                    chat_id=chat_id,
-                    service=service,
-                    event_bus=event_bus,
-                )
-        else:
+        async with event_bus_fac as event_bus:
             yield TelegramWatchlistBot(
                 bot=bot,
                 chat_id=chat_id,
                 service=service,
-                event_bus=event_bus_fac,  # type: ignore[arg-type]
+                event_bus=event_bus,
             )
     except GeneratorExit:
         return
@@ -169,21 +140,14 @@ async def _create_day_scheduler(
     event_bus_fac: AsyncContextManager[EventBus], cron: str
 ) -> AsyncIterator[DayChangeScheduler]:
     try:
-        if hasattr(event_bus_fac, "__aenter__"):
-            async with _ensure_async_cm(event_bus_fac) as event_bus:
-                scheduler = DayChangeScheduler(event_bus=event_bus, cron=cron)
-                scheduler.start()
-                try:
-                    yield scheduler
-                finally:
-                    scheduler.stop()
-        else:
-            scheduler = DayChangeScheduler(event_bus=event_bus_fac, cron=cron)
+        async with event_bus_fac as event_bus:
+            scheduler = DayChangeScheduler(event_bus=event_bus, cron=cron)
             scheduler.start()
             try:
                 yield scheduler
             finally:
                 scheduler.stop()
+
     except GeneratorExit:
         return
 

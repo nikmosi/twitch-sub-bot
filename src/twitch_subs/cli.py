@@ -62,15 +62,6 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     return names
 
 
-@contextlib.asynccontextmanager
-async def _ensure_async_cm(obj: AsyncContextManager[Any] | Any):
-    if hasattr(obj, "__aenter__") and hasattr(obj, "__aexit__"):
-        async with obj as value:
-            yield value
-    else:
-        yield obj
-
-
 async def run_watch(
     watcher: Watcher,
     repo: WatchlistRepository,
@@ -84,7 +75,7 @@ async def run_bot(
     bot_cm: AsyncContextManager[TelegramWatchlistBot], stop: asyncio.Event
 ) -> None:
     """Run Telegram bot until *stop* is set."""
-    async with _ensure_async_cm(bot_cm) as bot:
+    async with bot_cm as bot:
         task = asyncio.create_task(bot.run(), name="telegram-bot")
         try:
             await stop.wait()
@@ -221,9 +212,10 @@ def watch(
     ) -> int:
         logins = repo.list()
 
-        async with _ensure_async_cm(event_bus_factory) as event_bus, _ensure_async_cm(
-            watcher_factory
-        ) as watcher:
+        async with (
+            event_bus_factory as event_bus,
+            watcher_factory as watcher,
+        ):
             scheduler = DayChangeScheduler(
                 event_bus=event_bus, cron=settings.report_cron
             )
@@ -271,7 +263,6 @@ def watch(
                 log_and_wrap(
                     exc,
                     InfraError,
-                    logger,
                     context={"tasks": [t.get_name() for t in tasks]},
                 )
             finally:

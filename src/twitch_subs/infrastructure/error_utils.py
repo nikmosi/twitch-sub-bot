@@ -23,16 +23,17 @@ def _format_tail(exc: BaseException, *, limit: int = 6) -> str:
 def log_and_wrap(
     exc: BaseException,
     module_exc_cls: type[AppError],
-    log,  # loguru logger-like
     context: dict[str, Any] | None = None,
 ) -> AppError:
     formatted_tb = _format_tail(exc)
-    log.opt(exception=exc).exception("%s", formatted_tb)
+    logger.opt(exception=exc).exception("%s", formatted_tb)
     wrapped = module_exc_cls(str(exc), context=context or {})
     raise wrapped from exc
 
 
-def wrap_exceptions(module_exc_cls: type[AppError]) -> Callable[[Callable[P, R]], Callable[P, R]]:
+def wrap_exceptions(
+    module_exc_cls: type[AppError],
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     """Decorator to log short traceback and wrap errors into *module_exc_cls*."""
 
     def decorator(func: Callable[P, R]) -> Callable[P, R]:
