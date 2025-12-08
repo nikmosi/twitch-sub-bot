@@ -121,8 +121,8 @@ class TelegramWatchlistBot:
         try:
             usernames = to_usernames(arg)
         except CantExtractNicknama as e:
-            logger.opt(exception=e).warning(e.message())
-            await self.bus.publish(UserError(login=e.nickname, exception=e.message()))
+            logger.opt(exception=e).warning(e.message)
+            await self.bus.publish(UserError(login=e.nickname, exception=e.message))
         else:
             events = self.commands.add(usernames)
             await self.bus.publish(*events)
@@ -136,8 +136,8 @@ class TelegramWatchlistBot:
         try:
             usernames = to_usernames(arg)
         except CantExtractNicknama as e:
-            logger.opt(exception=e).warning(e.message())
-            await self.bus.publish(UserError(login=e.nickname, exception=e.message()))
+            logger.opt(exception=e).warning(e.message)
+            await self.bus.publish(UserError(login=e.nickname, exception=e.message))
         else:
             events = self.commands.remove(usernames)
             await self.bus.publish(*events)
