@@ -5,17 +5,16 @@ from dataclasses import dataclass, field
 from twitch_subs.errors import AppError
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ApplicationError(AppError):
     """Base exception for application layer."""
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class RepoCantFintLoginError(ApplicationError):
     login: str
     message: str = field(init=False)
     code: str = field(init=False, default="APP_REPO_LOOKUP_MISSING")
-    context: dict[str, str] = field(init=False)
 
     def __post_init__(self) -> None:  # pragma: no cover - formatting helper
         object.__setattr__(
@@ -29,7 +28,7 @@ class RepoCantFintLoginError(ApplicationError):
         object.__setattr__(self, "context", {"login": self.login})
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class WatcherRunError(ApplicationError):
     """Raised when Watcher.run_once fails unexpectedly."""
 
@@ -37,7 +36,6 @@ class WatcherRunError(ApplicationError):
     error: Exception
     message: str = field(init=False, default="Watcher run_once failed")
     code: str = field(init=False, default="APP_WATCHER_RUN_FAILED")
-    context: dict[str, object] = field(init=False)
 
     def __post_init__(self) -> None:  # pragma: no cover - formatting helper
         object.__setattr__(
