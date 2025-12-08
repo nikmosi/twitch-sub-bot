@@ -1,75 +1,79 @@
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any
 
 from twitch_subs.errors import AppError
 
 
+@dataclass(frozen=True, slots=True)
 class InfraError(AppError):
     """Base exception for infrastructure layer."""
 
 
+@dataclass(frozen=True, slots=True)
 class WatchListIsEmpty(InfraError):
-    def __init__(self) -> None:
-        super().__init__("Watchlist is empty", code="INFRA_WATCHLIST_EMPTY")
+    message: str = field(init=False, default="Watchlist is empty")
+    code: str = field(init=False, default="INFRA_WATCHLIST_EMPTY")
 
 
+@dataclass(frozen=True, slots=True)
 class AsyncTelegramNotifyError(InfraError):
-    def __init__(self, exception: Exception) -> None:
-        super().__init__(
-            f"Async telegram notification failed: {exception}",
-            code="INFRA_TELEGRAM_NOTIFY_FAILED",
-            context={"error": repr(exception)},
+    exception: Exception
+    message: str = field(init=False)
+    code: str = field(init=False, default="INFRA_TELEGRAM_NOTIFY_FAILED")
+    context: dict[str, str] = field(init=False)
+
+    def __post_init__(self) -> None:  # pragma: no cover - formatting helper
+        object.__setattr__(
+            self, "message", f"Async telegram notification failed: {self.exception}"
         )
-        object.__setattr__(self, "exception", exception)
+        object.__setattr__(self, "context", {"error": repr(self.exception)})
 
 
+@dataclass(frozen=True, slots=True)
 class CantGetCurrentEventLoop(InfraError):
-    def __init__(self) -> None:
-        super().__init__("Can't get event loop.", code="INFRA_EVENT_LOOP_MISSING")
+    message: str = field(init=False, default="Can't get event loop.")
+    code: str = field(init=False, default="INFRA_EVENT_LOOP_MISSING")
 
 
+@dataclass(frozen=True, slots=True)
 class CantExtractNicknama(InfraError):
-    def __init__(self, nickname: str) -> None:
-        super().__init__(
-            f"Can't extract nickname from {nickname}",
-            code="INFRA_NICKNAME_PARSE_FAILED",
-            context={"nickname": nickname},
+    nickname: str
+    message: str = field(init=False)
+    code: str = field(init=False, default="INFRA_NICKNAME_PARSE_FAILED")
+    context: dict[str, str] = field(init=False)
+
+    def __post_init__(self) -> None:  # pragma: no cover - formatting helper
+        object.__setattr__(
+            self, "message", f"Can't extract nickname from {self.nickname}"
         )
-        object.__setattr__(self, "nickname", nickname)
+        object.__setattr__(self, "context", {"nickname": self.nickname})
 
 
+@dataclass(frozen=True, slots=True)
 class EventBusStopError(InfraError):
-    def __init__(self, message: str, *, context: dict[str, Any] | None = None) -> None:
-        super().__init__(
-            message,
-            code="INFRA_EVENT_BUS_STOP_FAILED",
-            context=context,
-        )
+    message: str
+    context: dict[str, Any] | None = None
+    code: str = field(init=False, default="INFRA_EVENT_BUS_STOP_FAILED")
 
 
+@dataclass(frozen=True, slots=True)
 class NotificationDeliveryError(InfraError):
-    def __init__(self, message: str, *, context: dict[str, Any] | None = None) -> None:
-        super().__init__(
-            message,
-            code="INFRA_NOTIFICATION_FAILED",
-            context=context,
-        )
+    message: str
+    context: dict[str, Any] | None = None
+    code: str = field(init=False, default="INFRA_NOTIFICATION_FAILED")
 
 
+@dataclass(frozen=True, slots=True)
 class ProducerCloseError(InfraError):
-    def __init__(self, message: str, *, context: dict[str, Any] | None = None) -> None:
-        super().__init__(
-            message,
-            code="INFRA_PRODUCER_CLOSE_FAILED",
-            context=context,
-        )
+    message: str
+    context: dict[str, Any] | None = None
+    code: str = field(init=False, default="INFRA_PRODUCER_CLOSE_FAILED")
 
 
+@dataclass(frozen=True, slots=True)
 class ConsumerStopError(InfraError):
-    def __init__(self, message: str, *, context: dict[str, Any] | None = None) -> None:
-        super().__init__(
-            message,
-            code="INFRA_CONSUMER_STOP_FAILED",
-            context=context,
-        )
+    message: str
+    context: dict[str, Any] | None = None
+    code: str = field(init=False, default="INFRA_CONSUMER_STOP_FAILED")

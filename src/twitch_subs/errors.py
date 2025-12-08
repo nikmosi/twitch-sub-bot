@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class AppError(Exception):
     """Base error for all layers.
 
