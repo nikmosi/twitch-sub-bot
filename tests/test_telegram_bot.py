@@ -16,6 +16,7 @@ from twitch_subs.domain.models import (
     UserRecord,
 )
 from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
+from twitch_subs.infrastructure.error import AsyncTelegramNotifyError
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
@@ -151,7 +152,8 @@ async def test_notifier_send_message_handles_errors() -> None:
     notifier = TelegramNotifier(bot, "chat")
 
     bot.fail_next = True
-    await notifier.send_message("oops")
+    with pytest.raises(AsyncTelegramNotifyError):
+        await notifier.send_message("oops")
 
     assert bot.fail_next is False
 

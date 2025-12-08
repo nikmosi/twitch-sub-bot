@@ -13,6 +13,7 @@ from twitch_subs.domain.models import (
     LoginReportInfo,
     LoginStatus,
 )
+from twitch_subs.infrastructure.error import AsyncTelegramNotifyError
 
 
 class TelegramNotifier(NotifierProtocol):
@@ -77,3 +78,4 @@ class TelegramNotifier(NotifierProtocol):
             )
         except Exception as e:
             logger.opt(exception=e).exception("Telegram send failed")
+            raise AsyncTelegramNotifyError(e) from e

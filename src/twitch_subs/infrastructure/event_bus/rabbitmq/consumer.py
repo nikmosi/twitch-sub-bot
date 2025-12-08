@@ -22,6 +22,8 @@ from loguru import logger
 
 from twitch_subs.application.ports import Handler
 from twitch_subs.domain.events import DomainEvent
+from twitch_subs.infrastructure.error import ConsumerStopError
+from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.utils import routing_key_from_type
 
 LOGGER = logger
@@ -81,8 +83,13 @@ class Consumer:
                 LOGGER.debug(
                     "GeneratorExit during consumer cleanup; quick-stop suppressed."
                 )
-            except Exception:
-                LOGGER.exception("Error during quick cleanup of Consumer (suppressed).")
+            except Exception as exc:
+                log_and_wrap(
+                    exc,
+                    ConsumerStopError,
+                    LOGGER,
+                    context={"stage": "quick_cleanup", "exc_type": type(exc).__name__},
+                )
             return
 
         if exc_type:
@@ -133,8 +140,11 @@ class Consumer:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    LOGGER.opt(exception=e).exception(
-                        "stop: error while closing consumer"
+                    log_and_wrap(
+                        e,
+                        ConsumerStopError,
+                        LOGGER,
+                        context={"stage": "queue_cancel", "exc_type": type(e).__name__},
                     )
                 finally:
                     self._consumer_tag = None
@@ -152,8 +162,11 @@ class Consumer:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    LOGGER.opt(exception=e).exception(
-                        "stop: error while closing channel"
+                    log_and_wrap(
+                        e,
+                        ConsumerStopError,
+                        LOGGER,
+                        context={"stage": "channel_close", "exc_type": type(e).__name__},
                     )
                 finally:
                     self._channel = None
