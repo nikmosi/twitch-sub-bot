@@ -6,7 +6,7 @@ import re
 import signal
 import sys
 from itertools import batched
-from typing import Any, Awaitable, Sequence
+from typing import Any, AsyncContextManager, Awaitable, Sequence
 
 import typer
 from dependency_injector.wiring import Provide, inject
@@ -19,6 +19,7 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
     WatchlistRepository,
 )
+from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserAdded, UserRemoved
@@ -68,14 +69,18 @@ async def run_watch(
     await watcher.watch(WatchListLoginProvider(repo), interval, stop)
 
 
-async def run_bot(bot: TelegramWatchlistBot, stop: asyncio.Event) -> None:
+async def run_bot(
+    bot_cm: AsyncContextManager[TelegramWatchlistBot], stop: asyncio.Event
+) -> None:
     """Run Telegram bot until *stop* is set."""
-
-    task = asyncio.create_task(bot.run())
-    await stop.wait()
-    with contextlib.suppress(asyncio.CancelledError):
-        await bot.stop()
-        await task
+    async with bot_cm as bot:
+        task = asyncio.create_task(bot.run(), name="telegram-bot")
+        try:
+            await stop.wait()
+        finally:
+            with contextlib.suppress(asyncio.CancelledError):
+                await bot.stop()
+                await task
 
 
 @inject
@@ -87,17 +92,18 @@ async def _add(
 ) -> int:
     pending_events: list[UserAdded] = []
 
-    for batch in batched(usernames, n=10):
-        for username in batch:
-            if not service.add(username):
-                typer.echo(f"{username} already present")
-                continue
-            typer.echo(f"Added {username}")
-            if notify:
-                pending_events.append(UserAdded(login=username))
-    if pending_events:
-        await producer.publish(*pending_events)
-    return 0
+    async with producer:
+        for batch in batched(usernames, n=10):
+            for username in batch:
+                if not service.add(username):
+                    typer.echo(f"{username} already present")
+                    continue
+                typer.echo(f"Added {username}")
+                if notify:
+                    pending_events.append(UserAdded(login=username))
+        if pending_events:
+            await producer.publish(*pending_events)
+        return 0
 
 
 @inject
@@ -123,20 +129,21 @@ async def _remove(
 ) -> int:
     pending_events: list[UserRemoved] = []
 
-    for username in usernames:
-        removed = service.remove(username)
-        if removed:
-            typer.echo(f"Removed {username}")
-            if notify:
-                pending_events.append(UserRemoved(login=username))
-        else:
-            if quiet:
-                continue
-            typer.echo(f"{username} not found", err=True)
-            raise typer.Exit(1)
-    if pending_events:
-        await producer.publish(*pending_events)
-    return 0
+    async with producer:
+        for username in usernames:
+            removed = service.remove(username)
+            if removed:
+                typer.echo(f"Removed {username}")
+                if notify:
+                    pending_events.append(UserRemoved(login=username))
+            else:
+                if quiet:
+                    continue
+                typer.echo(f"{username} not found", err=True)
+                raise typer.Exit(1)
+        if pending_events:
+            await producer.publish(*pending_events)
+        return 0
 
 
 @inject
@@ -193,52 +200,62 @@ def watch(
     async def main(
         settings: Settings = Provide[AppContainer.settings],
         repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
-        event_bus: EventBus = Provide[AppContainer.event_bus],
+        event_bus_factory: AsyncContextManager[EventBus] = Provide[
+            AppContainer.event_bus_factory
+        ],
         notifier: NotifierProtocol = Provide[AppContainer.notifier],
         sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
-        watcher: Watcher = Provide[AppContainer.watcher],
-        bot: TelegramWatchlistBot = Provide[AppContainer.bot_app],
+        watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
+        bot: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
     ) -> int:
         logins = repo.list()
 
-        register_notification_handlers(event_bus, notifier, sub_state_repo)
+        async with event_bus_factory as event_bus, watcher_factory as watcher:
+            scheduler = DayChangeScheduler(
+                event_bus=event_bus, cron=settings.report_cron
+            )
 
-        logger.info(
-            f"Starting watch for logins {', '.join(logins)} with interval {interval}"
-        )
+            register_notification_handlers(event_bus, notifier, sub_state_repo)
 
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
+            logger.info(
+                f"Starting watch for logins {', '.join(logins)} with interval {interval}"
+            )
 
-        bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
-        watcher_task = loop.create_task(
-            run_watch(watcher, repo, interval, stop), name="run_watch"
-        )
+            loop = asyncio.get_event_loop()
+            loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-        tasks.extend([bot_task, watcher_task])
+            bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
+            watcher_task = loop.create_task(
+                run_watch(watcher, repo, interval, stop), name="run_watch"
+            )
 
-        def handle_task_result(task: asyncio.Task[Any]) -> None:
+            tasks.extend([bot_task, watcher_task])
+
+            def handle_task_result(task: asyncio.Task[Any]) -> None:
+                try:
+                    exception = task.exception()
+                except asyncio.CancelledError:  # pragma: no cover - cancellation path
+                    return
+                if exception is not None:
+                    task_errors.append(exception)
+                    stop.set()
+
+            for task in tasks:
+                task.add_done_callback(handle_task_result)
+
+            exit_code = 0
             try:
-                exception = task.exception()
-            except asyncio.CancelledError:  # pragma: no cover - cancellation path
-                return
-            if exception is not None:
-                task_errors.append(exception)
-                stop.set()
-
-        for task in tasks:
-            task.add_done_callback(handle_task_result)
-
-        exit_code = 0
-        try:
-            await wait_stop(settings.task_timeout)
-            logger.debug("shutdown")
-            if task_errors:
+                scheduler.start()
+                await wait_stop(settings.task_timeout)
+                logger.debug("shutdown")
+                if task_errors:
+                    exit_code = 1
+            except Exception as exc:  # pragma: no cover - defensive logging
+                logger.opt(exception=exc).exception("Worker crashed")
                 exit_code = 1
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.opt(exception=exc).exception("Worker crashed")
-            exit_code = 1
-        return exit_code
+            finally:
+                scheduler.stop()
+            return exit_code
 
     raise typer.Exit(asyncio.run(entry_point(main())))
 
