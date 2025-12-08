@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator
+from typing import Any, AsyncContextManager, AsyncIterator, Awaitable, Iterator
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection
@@ -11,6 +11,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from dependency_injector import containers, providers
+from loguru import logger
 from sqlalchemy import Engine, create_engine, text
 
 from twitch_subs.application.ports import (
@@ -19,6 +20,7 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
     TwitchClientProtocol,
 )
+from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.event_bus import RabbitMQEventBus
@@ -60,6 +62,12 @@ async def _aiohttp_session_resource() -> AsyncIterator[AiohttpSession]:
         await session.close()
 
 
+def _build_bot(
+    *, token: str, default: DefaultBotProperties, session: AiohttpSession
+) -> Bot:
+    return Bot(token=token, default=default, session=session)
+
+
 @asynccontextmanager
 async def _twitch_client_resource(creds: TwitchAppCreds) -> AsyncIterator[TwitchClient]:
     client = TwitchClient.from_creds(creds)
@@ -89,16 +97,44 @@ async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection
 
 
 @asynccontextmanager
+async def _ensure_async_cm(obj: AsyncContextManager[Any] | Any):
+    try:
+        if hasattr(obj, "__aenter__") and hasattr(obj, "__aexit__"):
+            async with obj as value:
+                yield value
+        else:
+            yield obj
+    except GeneratorExit:
+        return
+
+
+@asynccontextmanager
 async def _create_watcher(
     twitch: TwitchClientProtocol,
     notifier: NotifierProtocol,
     state_repo: SubscriptionStateRepo,
     event_bus_fac: AsyncContextManager[EventBus],
 ) -> AsyncIterator[Watcher]:
-    async with event_bus_fac as event_bus:
-        yield Watcher(
-            twitch=twitch, notifier=notifier, state_repo=state_repo, event_bus=event_bus
-        )
+    try:
+        if hasattr(event_bus_fac, "__aenter__"):
+            async with _ensure_async_cm(event_bus_fac) as event_bus:
+                yield Watcher(
+                    twitch=twitch,
+                    notifier=notifier,
+                    state_repo=state_repo,
+                    event_bus=event_bus,
+                    logger=logger,
+                )
+        else:
+            yield Watcher(
+                twitch=twitch,
+                notifier=notifier,
+                state_repo=state_repo,
+                event_bus=event_bus_fac,  # type: ignore[arg-type]
+                logger=logger,
+            )
+    except GeneratorExit:
+        return
 
 
 @asynccontextmanager
@@ -108,13 +144,48 @@ async def _create_telegram_watchlist_bot(
     service: WatchlistService,
     event_bus_fac: AsyncContextManager[EventBus],
 ) -> AsyncIterator[TelegramWatchlistBot]:
-    async with event_bus_fac as event_bus:
-        yield TelegramWatchlistBot(
-            bot=bot,
-            chat_id=chat_id,
-            service=service,
-            event_bus=event_bus,
-        )
+    try:
+        if hasattr(event_bus_fac, "__aenter__"):
+            async with _ensure_async_cm(event_bus_fac) as event_bus:
+                yield TelegramWatchlistBot(
+                    bot=bot,
+                    chat_id=chat_id,
+                    service=service,
+                    event_bus=event_bus,
+                )
+        else:
+            yield TelegramWatchlistBot(
+                bot=bot,
+                chat_id=chat_id,
+                service=service,
+                event_bus=event_bus_fac,  # type: ignore[arg-type]
+            )
+    except GeneratorExit:
+        return
+
+
+@asynccontextmanager
+async def _create_day_scheduler(
+    event_bus_fac: AsyncContextManager[EventBus], cron: str
+) -> AsyncIterator[DayChangeScheduler]:
+    try:
+        if hasattr(event_bus_fac, "__aenter__"):
+            async with _ensure_async_cm(event_bus_fac) as event_bus:
+                scheduler = DayChangeScheduler(event_bus=event_bus, cron=cron)
+                scheduler.start()
+                try:
+                    yield scheduler
+                finally:
+                    scheduler.stop()
+        else:
+            scheduler = DayChangeScheduler(event_bus=event_bus_fac, cron=cron)
+            scheduler.start()
+            try:
+                yield scheduler
+            finally:
+                scheduler.stop()
+    except GeneratorExit:
+        return
 
 
 # ---------- DI container ----------
@@ -152,7 +223,7 @@ class AppContainer(containers.DeclarativeContainer):
     # Telegram
     tg_session = providers.Resource(_aiohttp_session_resource)
     telegram_bot = providers.Resource(
-        Bot,
+        _build_bot,
         token=container_config.telegram_bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         session=tg_session,
@@ -173,8 +244,13 @@ class AppContainer(containers.DeclarativeContainer):
         consumer=consumer,
         producer=producer,
     )
+    day_scheduler = providers.Resource(
+        _create_day_scheduler,
+        event_bus_fac=event_bus_factory,
+        cron=container_config.report_cron,
+    )
     # Application actors
-    watcher = providers.Factory(
+    watcher = providers.Resource(
         _create_watcher,
         twitch=twitch_client,
         notifier=notifier,
@@ -182,7 +258,7 @@ class AppContainer(containers.DeclarativeContainer):
         event_bus_fac=event_bus_factory,
     )
 
-    bot_app = providers.Factory(
+    bot_app = providers.Resource(
         _create_telegram_watchlist_bot,
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,

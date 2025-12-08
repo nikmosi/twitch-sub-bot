@@ -1,159 +1,68 @@
 from __future__ import annotations
 
-import json
-from contextlib import asynccontextmanager
-from dataclasses import dataclass
-from typing import Any
-
 import pytest
 
 from twitch_subs.domain.events import UserAdded
-from twitch_subs.infrastructure.event_bus.rabbitmq import (
-    RabbitMQEventBus,
-    _serialize_event,
-)
+from twitch_subs.infrastructure.event_bus.rabbitmq import RabbitMQEventBus
 
 
-class StubExchange:
+class StubProducer:
     def __init__(self) -> None:
-        self.published: list[tuple[bytes, str, dict[str, Any]]] = []
-        self.is_closed = False
+        self.published: list[UserAdded] = []
+        self.started = False
+        self.stopped = False
 
-    async def publish(self, message: Any, routing_key: str) -> None:
-        self.published.append((message.body, routing_key, message.headers))
+    async def publish(self, *events: UserAdded) -> None:
+        self.published.extend(events)
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
 
 
-class StubChannel:
+class StubConsumer:
     def __init__(self) -> None:
-        self.closed = False
-        self.exchange = StubExchange()
+        self.subscriptions: list[tuple[type[UserAdded], object]] = []
+        self.started = False
+        self.stopped = False
 
-    @property
-    def is_closed(self) -> bool:
-        return self.closed
+    def subscribe(self, event_type: type[UserAdded], handler: object) -> None:
+        self.subscriptions.append((event_type, handler))
 
-    async def declare_exchange(self, name: str, *_: Any, **__: Any) -> StubExchange:
-        return self.exchange
+    async def start(self) -> None:
+        self.started = True
 
-    async def set_qos(self, **__: Any) -> None:  # pragma: no cover - no-op
-        return None
-
-    async def declare_queue(self, name: str | None = None, **__: Any) -> "StubQueue":
-        queue = StubQueue(name or "queue")
-        return queue
-
-    async def close(self) -> None:
-        self.closed = True
-
-
-class StubConnection:
-    def __init__(self, channel: StubChannel) -> None:
-        self._channel = channel
-        self.closed = False
-
-    @property
-    def is_closed(self) -> bool:
-        return self.closed
-
-    async def channel(self) -> StubChannel:
-        return self._channel
-
-    async def close(self) -> None:
-        self.closed = True
-
-
-@dataclass
-class StubQueue:
-    name: str
-    declaration_result: object | None = None
-
-    def __post_init__(self) -> None:
-        self.declaration_result = object()
-        self.bindings: list[tuple[Any, str]] = []
-        self.consumers: list[Any] = []
-        self.cancelled: list[str] = []
-
-    async def bind(self, exchange: Any, routing_key: str) -> None:
-        self.bindings.append((exchange, routing_key))
-
-    async def consume(self, callback: Any) -> str:
-        self.consumers.append(callback)
-        return "consumer-tag"
-
-    async def cancel(self, tag: str) -> None:
-        self.cancelled.append(tag)
-
-
-class StubMessage:
-    def __init__(self, body: bytes, headers: dict[str, Any]) -> None:
-        self.body = body
-        self.headers = headers
-        self.processed: list[bool] = []
-
-    @asynccontextmanager
-    async def process(self, *, requeue: bool = True):
-        try:
-            yield
-        finally:
-            self.processed.append(requeue)
+    async def stop(self) -> None:
+        self.stopped = True
 
 
 @pytest.mark.asyncio
-async def test_publish_uses_exchange(monkeypatch: pytest.MonkeyPatch) -> None:
-    bus = RabbitMQEventBus("amqp://example")
-    channel = StubChannel()
-    connection = StubConnection(channel)
-
-    bus._connection = connection
-    bus._publish_channel = channel
-    bus._exchange = channel.exchange
+async def test_publish_delegates_to_producer() -> None:
+    producer = StubProducer()
+    consumer = StubConsumer()
+    bus = RabbitMQEventBus(producer=producer, consumer=consumer)
 
     event = UserAdded(login="alice")
     await bus.publish(event)
 
-    assert channel.exchange.published
-    body, routing_key, headers = channel.exchange.published[0]
-    assert json.loads(body)["payload"]["login"] == "alice"
-    assert routing_key == "domain.user.added"
-    assert headers["event_id"] == event.id
+    assert producer.published == [event]
 
 
 @pytest.mark.asyncio
-async def test_start_binds_subscribed_handlers(monkeypatch: pytest.MonkeyPatch) -> None:
-    bus = RabbitMQEventBus("amqp://example")
-    channel = StubChannel()
-    connection = StubConnection(channel)
-    bus._connection = connection
+async def test_subscribe_and_lifecycle_calls_dependencies() -> None:
+    producer = StubProducer()
+    consumer = StubConsumer()
+    bus = RabbitMQEventBus(producer=producer, consumer=consumer)
 
-    bus.subscribe(UserAdded, lambda _: None)
+    handler = object()
+    bus.subscribe(UserAdded, handler)  # type: ignore[arg-type]
+
+    assert consumer.subscriptions == [(UserAdded, handler)]
 
     await bus.start()
+    await bus.stop()
 
-    assert bus._queue is not None
-    assert bus._consume_exchange is channel.exchange
-    assert bus._queue.bindings == [(channel.exchange, "domain.user.added")]
-    assert bus._consumer_tag == "consumer-tag"
-
-
-@pytest.mark.asyncio
-async def test_handle_message_deduplicates_events(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    handled: list[UserAdded] = []
-
-    bus = RabbitMQEventBus("amqp://example")
-
-    async def handler(event: UserAdded) -> None:
-        handled.append(event)
-
-    bus.subscribe(UserAdded, handler)
-
-    payload = _serialize_event(UserAdded(login="bob"))
-    body = json.dumps(payload).encode()
-    message = StubMessage(body, headers={"event_id": payload["id"]})
-
-    await bus._on_message(message)
-    await bus._on_message(message)
-
-    assert len(handled) == 1
-    assert message.processed == [True, True]
+    assert producer.started and consumer.started
+    assert producer.stopped and consumer.stopped

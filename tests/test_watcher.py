@@ -1,8 +1,10 @@
 import asyncio
+import logging
 from collections.abc import Iterable, Sequence
 
 import pytest
 
+from twitch_subs.application.error import WatcherRunError
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.ports import (
     EventBus,
@@ -147,12 +149,14 @@ async def test_run_once_handles_subscription_drop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_watch_publishes_failures_and_stops() -> None:
+async def test_watch_publishes_failures_and_stops(caplog: pytest.LogCaptureFixture) -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
     bus = FakeEventBus()
     notifier = FakeNotifier()
-    watcher = Watcher(twitch, notifier, repo, bus)
+    test_logger = logging.getLogger("watcher-test")
+    caplog.set_level(logging.ERROR, logger="watcher-test")
+    watcher = Watcher(twitch, notifier, repo, bus, logger=test_logger)
 
     async def failing_run_once(
         logins: Sequence[str], stop_event: asyncio.Event
@@ -168,17 +172,19 @@ async def test_watch_publishes_failures_and_stops() -> None:
         await asyncio.sleep(0.01)
         stop_event.set()
 
-    task = asyncio.create_task(
-        watcher.watch(provider, interval=0.1, stop_event=stop_event)
-    )
-    stopper = asyncio.create_task(trigger_stop())
-    await asyncio.gather(task, stopper)
+    with pytest.raises(WatcherRunError):
+        task = asyncio.create_task(
+            watcher.watch(provider, interval=0.1, stop_event=stop_event)
+        )
+        stopper = asyncio.create_task(trigger_stop())
+        await asyncio.gather(task, stopper)
 
     assert notifier.started == 1 and notifier.stopped == 1
     failure_events = [
         event for event in bus.events if isinstance(event, LoopCheckFailed)
     ]
     assert failure_events and failure_events[0].error == "boom"
+    assert "Run once failed" in caplog.text or "boom" in caplog.text
 
 
 @pytest.mark.asyncio

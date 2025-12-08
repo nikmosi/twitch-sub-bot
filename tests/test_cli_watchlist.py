@@ -68,6 +68,22 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
 
     stub_bus = StubEventBus()
 
+    class DummyProducer:
+        async def __aenter__(self) -> "DummyProducer":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def start(self) -> None:  # pragma: no cover - no-op
+            return None
+
+        async def stop(self) -> None:  # pragma: no cover - no-op
+            return None
+
+        async def publish(self, *events: Any) -> None:
+            stub_bus.published.extend(events)
+
     @asynccontextmanager
     async def _yield(obj: Any):
         yield obj
@@ -79,6 +95,12 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         container.rabbit_conn.override(providers.Resource(_yield, object()))
         container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
         container.day_scheduler.override(providers.Resource(_yield, None))
+        container.telegram_bot.override(
+            providers.Resource(_yield, DummyAiogramBot("token"))
+        )
+        container.bot_app.override(providers.Resource(_yield, object()))
+        container.producer.override(providers.Resource(_yield, DummyProducer()))
+        container.watcher.override(providers.Resource(_yield, "watcher"))
         container.settings.override(providers.Object(settings))
 
         await container.init_resources()
@@ -151,10 +173,29 @@ def test_remove_emits_user_removed_event(
     db = tmp_path / "wl.db"
     stub_bus = StubEventBus()
 
+    @asynccontextmanager
+    async def _yield(obj: Any):
+        yield obj
+
+    class DummyProducer:
+        async def __aenter__(self) -> "DummyProducer":
+            return self
+
+        async def __aexit__(self, *_: Any) -> None:
+            return None
+
+        async def publish(self, *events: Any) -> None:
+            stub_bus.published.extend(events)
+
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
-        container.event_bus_factory.override(providers.Object(stub_bus))
+        container.rabbit_conn.override(providers.Resource(_yield, object()))
+        container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
+        container.telegram_bot.override(
+            providers.Resource(_yield, DummyAiogramBot("token"))
+        )
+        container.producer.override(providers.Resource(_yield, DummyProducer()))
         container.settings.override(providers.Object(settings))
         return container
 

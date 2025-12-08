@@ -17,6 +17,8 @@ from aio_pika.abc import (
 from loguru import logger
 
 from twitch_subs.domain.events import DomainEvent
+from twitch_subs.infrastructure.error import ProducerCloseError
+from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.utils import (
     routing_key_from_type,
     serialize_event,
@@ -62,8 +64,11 @@ class Producer:
             except asyncio.CancelledError:
                 raise
             except Exception as e:
-                LOGGER.opt(exception=e).exception(
-                    "producer: error while closing channel"
+                log_and_wrap(
+                    e,
+                    ProducerCloseError,
+                    LOGGER,
+                    context={"stage": "channel_close", "exc_type": type(e).__name__},
                 )
             finally:
                 self._channel = None

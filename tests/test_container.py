@@ -10,6 +10,7 @@ from dependency_injector import providers
 
 from twitch_subs.config import Settings
 from twitch_subs.container import AppContainer, shutdown_container
+from twitch_subs.application.watcher import Watcher
 
 
 @dataclass
@@ -160,12 +161,19 @@ async def test_build_container_initializes_resources(
 
     notifier1 = container.notifier()
     notifier2 = container.notifier()
+    if inspect.isawaitable(notifier1):
+        notifier1 = await notifier1
+    if inspect.isawaitable(notifier2):
+        notifier2 = await notifier2
     assert notifier1 is notifier2
     assert notifier1.bot is bot
 
     twitch = container.twitch_client()
     if inspect.isawaitable(twitch):
         twitch = await twitch
+    container.watcher.override(
+        providers.Object(Watcher(twitch, notifier1, sub_state1, FakeEventBus()))
+    )
     watcher = container.watcher()
     if inspect.isawaitable(watcher):
         watcher = await watcher

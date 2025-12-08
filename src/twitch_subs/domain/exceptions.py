@@ -1,16 +1,14 @@
-from typing import override
+from __future__ import annotations
+
+from twitch_subs.errors import AppError
 
 
-class AppException(Exception):
-    """Base application exception."""
-
-    def message(self) -> str:
-        return "Application error"
+class DomainError(AppError):
+    """Base exception for domain layer."""
 
 
-class SigTerm(AppException):
+class SigTerm(DomainError):
     """Raised when the application receives SIGTERM."""
 
-    @override
-    def message(self) -> str:
-        return "Received SIGTERM"
+    def __init__(self) -> None:
+        super().__init__("Received SIGTERM", code="DOMAIN_SIGTERM")
