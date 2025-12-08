@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from loguru import logger
-
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -26,6 +24,7 @@ def register_notification_handlers(
     event_bus: EventBus,
     notifier: NotifierProtocol,
     sub_state_repo: SubscriptionStateRepo,
+    logger: object | None = None,
 ) -> DailyReportCollector:
     """Register default notification and logging handlers on *event_bus*."""
 
@@ -46,13 +45,18 @@ def register_notification_handlers(
         )
 
     async def log_once_check(event: OnceChecked) -> None:
-        logger.debug(f"checked {event.login} with status {event.current_state.value}")
+        if logger:
+            logger.debug(  # type: ignore[call-arg]
+                f"checked {event.login} with status {event.current_state.value}"
+            )
 
     async def log_loop_check(event: LoopChecked) -> None:
-        logger.debug(f"checked {event.logins=}")
+        if logger:
+            logger.debug(f"checked {event.logins=}")  # type: ignore[call-arg]
 
     async def log_subs_change(event: UserBecomeSubscribtable) -> None:
-        logger.info(f"{event.login} become {event.current_state.value}")
+        if logger:
+            logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
 
     event_bus.subscribe(UserAdded, notify_about_add)
     event_bus.subscribe(UserRemoved, notify_about_remove)

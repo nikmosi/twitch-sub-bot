@@ -1,17 +1,31 @@
-from dataclasses import dataclass
+from __future__ import annotations
+
+from twitch_subs.errors import AppError
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class ApplicationBaseError(Exception):
-    @property
-    def message(self) -> str:
-        return "Occur error in application layer."
+class ApplicationError(AppError):
+    """Base exception for application layer."""
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class RepoCantFintLoginError(Exception):
-    login: str
+class RepoCantFintLoginError(ApplicationError):
+    def __init__(self, login: str) -> None:
+        super().__init__(
+            message=(
+                f"Repository returned None when it should return info about {login}."
+            ),
+            context={"login": login},
+            code="APP_REPO_LOOKUP_MISSING",
+        )
+        self.login = login
 
-    @property
-    def message(self) -> str:
-        return f"Repository return None, when shouldn't return info about {self.login}."
+
+class WatcherRunError(ApplicationError):
+    """Raised when Watcher.run_once fails unexpectedly."""
+
+    def __init__(self, logins: tuple[str, ...], error: Exception) -> None:
+        super().__init__(
+            message="Watcher run_once failed",
+            context={"logins": logins, "error": repr(error)},
+            code="APP_WATCHER_RUN_FAILED",
+        )
+        self.logins = logins

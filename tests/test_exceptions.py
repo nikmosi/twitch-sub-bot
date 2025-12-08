@@ -1,12 +1,13 @@
-from twitch_subs.domain.exceptions import AppException, SigTerm
+from twitch_subs.domain.exceptions import DomainError, SigTerm
 
 
-def test_app_exception_message() -> None:
-    e = AppException()
-    assert e.message() == "Application error"
+def test_domain_error_inheritance() -> None:
+    err = DomainError("boom", code="CODE")
+    assert err.message == "boom"
+    assert err.code == "CODE"
 
 
 def test_sigterm_message_and_inheritance() -> None:
     e = SigTerm()
-    assert e.message() == "Received SIGTERM"
-    assert isinstance(e, AppException)
+    assert e.message == "Received SIGTERM"
+    assert isinstance(e, DomainError)

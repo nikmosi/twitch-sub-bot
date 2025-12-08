@@ -13,6 +13,7 @@ from twitch_subs.domain.models import (
     LoginReportInfo,
     LoginStatus,
 )
+from twitch_subs.infrastructure.error import NotificationDeliveryError
 
 _TAG_RE = re.compile(r"</?b>|</?code>|</?i>|</?u>")
 _LINK_RE = re.compile(r'<a\s+href="([^"]+)">([^<]+)</a>')
@@ -82,3 +83,6 @@ class ConsoleNotifier(NotifierProtocol):
             logger.info("\n" + plain if "\n" in plain else plain)
         except Exception as e:
             logger.opt(exception=e).exception("Console notify failed")
+            raise NotificationDeliveryError(
+                "Console notification failed", context={"error": repr(e)}
+            ) from e
