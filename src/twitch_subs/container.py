@@ -11,7 +11,6 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from dependency_injector import containers, providers
-from loguru import logger
 from sqlalchemy import Engine, create_engine, text
 
 from twitch_subs.application.ports import (
@@ -20,7 +19,6 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
     TwitchClientProtocol,
 )
-from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.models import TwitchAppCreds
 from twitch_subs.infrastructure.event_bus import RabbitMQEventBus
@@ -110,7 +108,6 @@ async def _create_watcher(
                 notifier=notifier,
                 state_repo=state_repo,
                 event_bus=event_bus,
-                logger=logger,
             )
     except GeneratorExit:
         return
@@ -131,23 +128,6 @@ async def _create_telegram_watchlist_bot(
                 service=service,
                 event_bus=event_bus,
             )
-    except GeneratorExit:
-        return
-
-
-@asynccontextmanager
-async def _create_day_scheduler(
-    event_bus_fac: AsyncContextManager[EventBus], cron: str
-) -> AsyncIterator[DayChangeScheduler]:
-    try:
-        async with event_bus_fac as event_bus:
-            scheduler = DayChangeScheduler(event_bus=event_bus, cron=cron)
-            scheduler.start()
-            try:
-                yield scheduler
-            finally:
-                scheduler.stop()
-
     except GeneratorExit:
         return
 
@@ -208,13 +188,9 @@ class AppContainer(containers.DeclarativeContainer):
         consumer=consumer,
         producer=producer,
     )
-    day_scheduler = providers.Resource(
-        _create_day_scheduler,
-        event_bus_fac=event_bus_factory,
-        cron=container_config.report_cron,
-    )
+
     # Application actors
-    watcher = providers.Resource(
+    watcher = providers.Factory(
         _create_watcher,
         twitch=twitch_client,
         notifier=notifier,
@@ -222,7 +198,7 @@ class AppContainer(containers.DeclarativeContainer):
         event_bus_fac=event_bus_factory,
     )
 
-    bot_app = providers.Resource(
+    bot_app = providers.Factory(
         _create_telegram_watchlist_bot,
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,
