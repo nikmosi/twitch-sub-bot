@@ -213,11 +213,16 @@ def watch(
         notifier: NotifierProtocol = Provide[AppContainer.notifier],
         sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
         watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
-        bot: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
+        bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[
+            AppContainer.bot_app
+        ],
     ) -> int:
         logins = repo.list()
 
-        async with event_bus_factory as event_bus, watcher_factory as watcher:
+        async with (
+            event_bus_factory as event_bus,
+            watcher_factory as watcher,
+        ):
             scheduler = DayChangeScheduler(
                 event_bus=event_bus, cron=settings.report_cron
             )
@@ -233,7 +238,7 @@ def watch(
             loop = asyncio.get_event_loop()
             loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-            bot_task = loop.create_task(run_bot(bot, stop), name="run_bot")
+            bot_task = loop.create_task(run_bot(bot_cm, stop), name="run_bot")
             watcher_task = loop.create_task(
                 run_watch(watcher, repo, interval, stop), name="run_watch"
             )

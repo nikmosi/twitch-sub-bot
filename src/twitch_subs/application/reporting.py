@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 
 # pyright: reportMissingTypeStubs=false
 import aiocron
+from loguru import logger
 
 from twitch_subs.application.error import RepoCantFintLoginError
 from twitch_subs.application.ports import (
@@ -105,6 +106,7 @@ class DayChangeScheduler:
             return
         job = self._crontab_factory(self.cron, func=self._emit, start=True)
         self._cron_job = job
+        logger.info("started DayChangeScheduler")
 
     def stop(self) -> None:
         if self._cron_job is None:
