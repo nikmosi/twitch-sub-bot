@@ -227,9 +227,7 @@ def watch(
                 event_bus=event_bus, cron=settings.report_cron
             )
 
-            register_notification_handlers(
-                event_bus, notifier, sub_state_repo, logger=logger
-            )
+            register_notification_handlers(event_bus, notifier, sub_state_repo)
 
             logger.info(
                 f"Starting watch for logins {', '.join(logins)} with interval {interval}"

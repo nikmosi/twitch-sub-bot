@@ -20,7 +20,7 @@ from .filters import IDFilter
 
 def to_usernames(text: str) -> list[str]:
     res: list[str] = []
-    pattern = r"^(?:https?://(?:www\.)?twitch\.tv/)?([^/\s]+)"
+    pattern = r"^(?:https?://(?:www|m)?\.?twitch\.tv/)?([^/\s]+)"
     for i in text.split(" "):
         match_ = re.search(pattern, i)
         if not match_:
