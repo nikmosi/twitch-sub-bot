@@ -236,10 +236,13 @@ def watch(
             loop = asyncio.get_event_loop()
             loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
 
-            bot_task = loop.create_task(run_bot(bot_cm, stop), name="run_bot")
+            bot_stop = asyncio.Event()
+            bot_task = loop.create_task(run_bot(bot_cm, bot_stop), name="run_bot")
             watcher_task = loop.create_task(
                 run_watch(watcher, repo, interval, stop), name="run_watch"
             )
+
+            watcher_task.add_done_callback(lambda _: bot_stop.set())
 
             tasks.extend([bot_task, watcher_task])
 
