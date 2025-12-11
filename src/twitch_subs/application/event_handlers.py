@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from loguru import logger
+
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -15,6 +17,7 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserAdded,
     UserBecomeSubscribtable,
+    UserError,
     UserRemoved,
 )
 from twitch_subs.domain.models import LoginStatus
@@ -24,9 +27,16 @@ def register_notification_handlers(
     event_bus: EventBus,
     notifier: NotifierProtocol,
     sub_state_repo: SubscriptionStateRepo,
-    logger: object | None = None,
 ) -> DailyReportCollector:
     """Register default notification and logging handlers on *event_bus*."""
+
+    async def log_user_error(event: UserError) -> None:
+        logger.error(f"{event}")
+
+    async def notify_about_error(event: UserError) -> None:
+        await notifier.send_message(
+            f"Error: with {event.login} occur - {event.exception}"
+        )
 
     async def notify_about_add(event: UserAdded) -> None:
         await notifier.send_message(
@@ -40,29 +50,30 @@ def register_notification_handlers(
 
     async def notify_about_subs_change(event: UserBecomeSubscribtable) -> None:
         await notifier.notify_about_change(
-            LoginStatus(event.login, event.current_state, None),
+            LoginStatus(
+                login=event.login, broadcaster_type=event.current_state, user=None
+            ),
             event.current_state,
         )
 
     async def log_once_check(event: OnceChecked) -> None:
-        if logger:
-            logger.debug(  # type: ignore[call-arg]
-                f"checked {event.login} with status {event.current_state.value}"
-            )
+        logger.debug(  # type: ignore[call-arg]
+            f"checked {event.login} with status {event.current_state.value}"
+        )
 
     async def log_loop_check(event: LoopChecked) -> None:
-        if logger:
-            logger.debug(f"checked {event.logins=}")  # type: ignore[call-arg]
+        logger.debug(f"checked {event.logins=}")  # type: ignore[call-arg]
 
     async def log_subs_change(event: UserBecomeSubscribtable) -> None:
-        if logger:
-            logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
+        logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
 
     event_bus.subscribe(UserAdded, notify_about_add)
     event_bus.subscribe(UserRemoved, notify_about_remove)
     event_bus.subscribe(UserBecomeSubscribtable, notify_about_subs_change)
+    event_bus.subscribe(UserError, notify_about_error)
     event_bus.subscribe(UserBecomeSubscribtable, log_subs_change)
     event_bus.subscribe(OnceChecked, log_once_check)
+    event_bus.subscribe(UserError, log_user_error)
     event_bus.subscribe(LoopChecked, log_loop_check)
 
     collector = DailyReportCollector(notifier, sub_state_repo)
