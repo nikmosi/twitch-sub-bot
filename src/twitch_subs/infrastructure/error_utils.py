@@ -26,7 +26,7 @@ def log_and_wrap(
     context: dict[str, Any] | None = None,
 ) -> AppError:
     formatted_tb = _format_tail(exc)
-    logger.opt(exception=exc).exception("%s", formatted_tb)
+    logger.opt(exception=exc).exception(formatted_tb)
     wrapped = module_exc_cls(str(exc), context=context or {})
     raise wrapped from exc
 
