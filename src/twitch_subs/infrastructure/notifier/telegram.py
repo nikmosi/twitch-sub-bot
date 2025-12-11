@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Sequence
 from itertools import batched, groupby
 
@@ -20,7 +19,6 @@ class TelegramNotifier(NotifierProtocol):
     def __init__(self, bot: Bot, chat_id: str):
         self.bot = bot
         self.chat_id = chat_id
-        self._loop: asyncio.AbstractEventLoop | None = None
 
     async def notify_about_change(
         self, status: LoginStatus, curr: BroadcasterType
