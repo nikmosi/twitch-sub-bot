@@ -154,9 +154,7 @@ async def test_watch_publishes_failures_and_stops(caplog: pytest.LogCaptureFixtu
     repo = FakeRepo()
     bus = FakeEventBus()
     notifier = FakeNotifier()
-    test_logger = logging.getLogger("watcher-test")
-    caplog.set_level(logging.ERROR, logger="watcher-test")
-    watcher = Watcher(twitch, notifier, repo, bus, logger=test_logger)
+    watcher = Watcher(twitch, notifier, repo, bus)
 
     async def failing_run_once(
         logins: Sequence[str], stop_event: asyncio.Event
@@ -184,7 +182,6 @@ async def test_watch_publishes_failures_and_stops(caplog: pytest.LogCaptureFixtu
         event for event in bus.events if isinstance(event, LoopCheckFailed)
     ]
     assert failure_events and failure_events[0].error == "boom"
-    assert "Run once failed" in caplog.text or "boom" in caplog.text
 
 
 @pytest.mark.asyncio

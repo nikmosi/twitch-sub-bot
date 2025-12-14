@@ -28,6 +28,14 @@ class StubEventBus:
         self.published: list[Any] = []
         self.subscriptions: list[tuple[type[Any], Any]] = []
 
+    async def __aenter__(self) -> "StubEventBus":
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        await self.stop()
+        return None
+
     async def start(self) -> None:
         self.started += 1
 
@@ -73,6 +81,17 @@ class DummyBot:
         return None
 
     async def stop(self) -> None:  # pragma: no cover - behaviour mocked in tests
+        return None
+
+
+class AsyncValueContextManager:
+    def __init__(self, value: Any) -> None:
+        self.value = value
+
+    async def __aenter__(self) -> Any:
+        return self.value
+
+    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
         return None
 
 
@@ -123,6 +142,14 @@ async def test_run_bot_waits_for_stop() -> None:
         def __init__(self) -> None:
             self.started = False
             self.stopped = False
+            self.entered = False
+
+        async def __aenter__(self) -> "Bot":
+            self.entered = True
+            return self
+
+        async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+            return None
 
         async def run(self) -> None:
             self.started = True
@@ -140,7 +167,7 @@ async def test_run_bot_waits_for_stop() -> None:
     trigger_task = asyncio.create_task(trigger())
     await cli.run_bot(bot, stop)
     await trigger_task
-    assert bot.started and bot.stopped
+    assert bot.entered and bot.started and bot.stopped
 
 
 def test_watch_bot_exception_exitcode(
@@ -316,9 +343,10 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         calls["watch"] = (watcher, repo.list(), interval)
         stop_event.set()
 
-    async def fake_run_bot(bot: Any, stop_event: asyncio.Event) -> None:
-        calls["bot"] = bot
-        stop_event.set()
+    async def fake_run_bot(bot_cm: Any, stop_event: asyncio.Event) -> None:
+        async with bot_cm as bot:
+            calls["bot"] = bot
+            stop_event.set()
 
     monkeypatch.setattr(cli, "run_watch", fake_run_watch)
     monkeypatch.setattr(cli, "run_bot", fake_run_bot)
@@ -330,8 +358,8 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         container.watchlist_repo.override(providers.Object(fake_repo))
         container.notifier.override(providers.Object(fake_notifier))
         container.sub_state_repo.override(providers.Object(fake_state_repo))
-        container.watcher.override(providers.Object("watcher"))
-        container.bot_app.override(providers.Object("bot"))
+        container.watcher.override(providers.Object(AsyncValueContextManager("watcher")))
+        container.bot_app.override(providers.Object(AsyncValueContextManager("bot")))
         container.settings.override(providers.Object(settings))
         return container
 
