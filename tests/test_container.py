@@ -75,19 +75,6 @@ class FakeEventBus:
         self.stopped = True
 
 
-class FakeDayChangeScheduler:
-    def __init__(self, event_bus, cron: str) -> None:
-        self.event_bus = event_bus
-        self.cron = cron
-        self.started = False
-        self.stopped = False
-
-    def start(self) -> None:
-        self.started = True
-
-    def stop(self) -> None:
-        self.stopped = True
-
 
 @pytest.fixture
 def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
@@ -108,9 +95,6 @@ async def test_build_container_initializes_resources(
     monkeypatch.setattr("twitch_subs.container.TelegramNotifier", FakeNotifier)
     monkeypatch.setattr("twitch_subs.container.TwitchClient", FakeTwitch)
     monkeypatch.setattr("twitch_subs.container.AiohttpSession", FakeSession)
-    monkeypatch.setattr(
-        "twitch_subs.container.DayChangeScheduler", FakeDayChangeScheduler
-    )
     monkeypatch.setattr("twitch_subs.container.RabbitMQEventBus", FakeEventBus)
 
     connections: list[FakeConnection] = []
@@ -180,21 +164,15 @@ async def test_build_container_initializes_resources(
     assert watcher.twitch is twitch
     assert watcher.notifier is notifier1
 
-    bot_app = container.bot_app()
-    if inspect.isawaitable(bot_app):
-        bot_app = await bot_app
-    assert bot_app.bot is bot
-    assert bot_app.service.repo is repo1
-
-    scheduler = container.day_scheduler()
-    if inspect.isawaitable(scheduler):
-        scheduler = await scheduler
-    assert isinstance(scheduler, FakeDayChangeScheduler)
-    assert scheduler.started
+    bot_cm = container.bot_app()
+    if inspect.isawaitable(bot_cm):
+        bot_cm = await bot_cm
+    async with bot_cm as bot_app:
+        assert bot_app.bot is bot
+        assert bot_app.service.repo is repo1
 
     await shutdown_container(container)
 
     assert session.closed
     assert twitch.closed
-    assert scheduler.stopped
     assert connections and connections[0].closed
