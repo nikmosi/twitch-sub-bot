@@ -358,7 +358,9 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
         container.watchlist_repo.override(providers.Object(fake_repo))
         container.notifier.override(providers.Object(fake_notifier))
         container.sub_state_repo.override(providers.Object(fake_state_repo))
-        container.watcher.override(providers.Object(AsyncValueContextManager("watcher")))
+        container.watcher.override(
+            providers.Object(AsyncValueContextManager("watcher"))
+        )
         container.bot_app.override(providers.Object(AsyncValueContextManager("bot")))
         container.settings.override(providers.Object(settings))
         return container
