@@ -7,7 +7,7 @@ import signal
 import sys
 from contextlib import contextmanager
 from itertools import batched
-from typing import AsyncContextManager, Awaitable, Iterator, Sequence, TypeVar
+from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator, Sequence, TypeVar
 
 import typer
 from dependency_injector.wiring import Provide, inject
@@ -76,12 +76,12 @@ async def run_watch(
 
 
 async def run_bot(
-    bot_cm: AsyncContextManager[TelegramWatchlistBot],
+    bot_cm: TelegramWatchlistBot | AsyncContextManager[TelegramWatchlistBot],
     stop: asyncio.Event,
 ) -> None:
     """Run Telegram bot until *stop* is set."""
 
-    async with bot_cm as bot:
+    async def _run_bot(bot: TelegramWatchlistBot) -> None:
         task = asyncio.create_task(bot.run(), name="telegram-bot")
         try:
             await stop.wait()
@@ -89,6 +89,12 @@ async def run_bot(
             with contextlib.suppress(asyncio.CancelledError):
                 await bot.stop()
                 await task
+
+    if hasattr(bot_cm, "__aenter__"):
+        async with bot_cm as bot:
+            await _run_bot(bot)
+    else:
+        await _run_bot(bot_cm)
 
 
 @inject
@@ -234,17 +240,31 @@ async def injected_main(
     stop: asyncio.Event,
     settings: Settings = Provide[AppContainer.settings],
     repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
-    event_bus_factory: AsyncContextManager[EventBus] = Provide[
+    event_bus_factory: EventBus | AsyncContextManager[EventBus] = Provide[
         AppContainer.event_bus_factory
     ],
     notifier: NotifierProtocol = Provide[AppContainer.notifier],
     sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
-    watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
-    bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
+    watcher_factory: Watcher | AsyncContextManager[Watcher] = Provide[
+        AppContainer.watcher
+    ],
+    bot_cm: TelegramWatchlistBot | AsyncContextManager[TelegramWatchlistBot] = Provide[
+        AppContainer.bot_app
+    ],
 ) -> int:
     logins = repo.list()
 
-    async with event_bus_factory as event_bus, watcher_factory as watcher:
+    @contextlib.asynccontextmanager
+    async def wrap_ctx(value: T | AsyncContextManager[T]) -> AsyncIterator[T]:
+        if hasattr(value, "__aenter__"):
+            async with value as wrapped:
+                yield wrapped
+        else:
+            yield value  # type: ignore[misc]
+
+    async with wrap_ctx(event_bus_factory) as event_bus, wrap_ctx(
+        watcher_factory
+    ) as watcher:
         scheduler = DayChangeScheduler(event_bus=event_bus, cron=settings.report_cron)
         register_notification_handlers(event_bus, notifier, sub_state_repo)
 
