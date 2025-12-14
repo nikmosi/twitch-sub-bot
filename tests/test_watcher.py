@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from collections.abc import Iterable, Sequence
 
 import pytest
@@ -149,7 +148,9 @@ async def test_run_once_handles_subscription_drop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_watch_publishes_failures_and_stops(caplog: pytest.LogCaptureFixture) -> None:
+async def test_watch_publishes_failures_and_stops(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
     bus = FakeEventBus()

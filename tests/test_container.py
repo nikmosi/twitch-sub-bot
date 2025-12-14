@@ -75,7 +75,6 @@ class FakeEventBus:
         self.stopped = True
 
 
-
 @pytest.fixture
 def settings(monkeypatch: pytest.MonkeyPatch) -> Settings:
     monkeypatch.setenv("TWITCH_CLIENT_ID", "id")

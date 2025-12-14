@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 import pytest
@@ -35,7 +34,10 @@ def test_application_error_messages_and_context() -> None:
 
     watcher_error = WatcherRunError(logins=("bob",), error=RuntimeError("boom"))
     assert watcher_error.message == "Watcher run_once failed"
-    assert watcher_error.context == {"logins": ("bob",), "error": "RuntimeError('boom')"}
+    assert watcher_error.context == {
+        "logins": ("bob",),
+        "error": "RuntimeError('boom')",
+    }
 
 
 def test_cant_extract_nicknama_message_and_context() -> None:
@@ -45,7 +47,9 @@ def test_cant_extract_nicknama_message_and_context() -> None:
 
 
 @pytest.mark.asyncio
-async def test_console_notifier_logs_and_raises(caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_console_notifier_logs_and_raises(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
     notifier = ConsoleNotifier()
 
     def boom(_: str) -> str:
@@ -64,7 +68,9 @@ async def test_console_notifier_logs_and_raises(caplog: pytest.LogCaptureFixture
 
 
 @pytest.mark.asyncio
-async def test_telegram_notifier_logs_and_raises(caplog: pytest.LogCaptureFixture) -> None:
+async def test_telegram_notifier_logs_and_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     class FailingBot:
         async def send_message(self, *args, **kwargs):  # type: ignore[override]
             raise RuntimeError("tg boom")
