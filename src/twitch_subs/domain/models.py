@@ -4,7 +4,11 @@ from dataclasses import field
 from datetime import datetime, timezone
 from enum import Enum
 
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel, ConfigDict
+
+
+class ConfiguredBaseModel(BaseModel):
+    model_config = ConfigDict(frozen=True)
 
 
 class BroadcasterType(str, Enum):
@@ -16,22 +20,19 @@ class BroadcasterType(str, Enum):
         return self in {BroadcasterType.AFFILIATE, BroadcasterType.PARTNER}
 
 
-@dataclass(frozen=True)
-class TwitchAppCreds:
+class TwitchAppCreds(ConfiguredBaseModel):
     client_id: str
     client_secret: str
 
 
-@dataclass(frozen=True)
-class UserRecord:
+class UserRecord(ConfiguredBaseModel):
     id: str
     login: str
     display_name: str
     broadcaster_type: BroadcasterType
 
 
-@dataclass(frozen=True)
-class LoginStatus:
+class LoginStatus(ConfiguredBaseModel):
     """Result of a single login check."""
 
     login: str
@@ -39,8 +40,7 @@ class LoginStatus:
     user: UserRecord | None
 
 
-@dataclass(frozen=True, slots=True)
-class SubState:
+class SubState(ConfiguredBaseModel):
     login: str
     status: BroadcasterType
     since: datetime | None = None
@@ -52,7 +52,6 @@ class SubState:
         return self.status.is_subscribable()
 
 
-@dataclass(frozen=True)
-class LoginReportInfo:
+class LoginReportInfo(ConfiguredBaseModel):
     login: str
     broadcaster: BroadcasterType = field(default=BroadcasterType.NONE)

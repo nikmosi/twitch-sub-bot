@@ -42,7 +42,7 @@ class Watcher:
     async def check_login(self, login: str) -> LoginStatus:
         user = await self.twitch.get_user_by_login(login)
         btype = BroadcasterType.NONE if user is None else user.broadcaster_type
-        return LoginStatus(login, btype, user)
+        return LoginStatus(login=login, broadcaster_type=btype, user=user)
 
     async def run_once(self, logins: Sequence[str], stop_event: asyncio.Event) -> bool:
         changed = False

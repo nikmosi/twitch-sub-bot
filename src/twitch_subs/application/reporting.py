@@ -53,7 +53,7 @@ class DailyReportCollector:
             state = self.state_repo.get_sub_state(login)
             if state is None:
                 raise RepoCantFintLoginError(login=login)
-            report.append(LoginReportInfo(login, state.status))
+            report.append(LoginReportInfo(login=login, broadcaster=state.status))
         return report
 
     def _reset(self) -> None:
