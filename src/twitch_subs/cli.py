@@ -5,8 +5,9 @@ import contextlib
 import re
 import signal
 import sys
+from contextlib import contextmanager
 from itertools import batched
-from typing import Any, AsyncContextManager, Awaitable, Sequence, TypeVar
+from typing import AsyncContextManager, Awaitable, Iterator, Sequence, TypeVar
 
 import typer
 from dependency_injector.wiring import Provide, inject
@@ -178,106 +179,104 @@ async def _state_list(
     return 0
 
 
+@contextmanager
+def stop_on_sigterm(stop: asyncio.Event) -> Iterator[None]:
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, stop.set)
+    try:
+        yield
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)
+
+
+async def run_worker_group(
+    *,
+    interval: int,
+    stop: asyncio.Event,
+    settings: Settings,
+    repo: WatchlistRepository,
+    watcher: Watcher,
+    bot_cm: AsyncContextManager[TelegramWatchlistBot],
+) -> None:
+    bot_stop = asyncio.Event()
+
+    async def watcher_wrap() -> None:
+        try:
+            await run_watch(watcher, repo, interval, stop)
+        finally:
+            bot_stop.set()
+
+    bot_task = asyncio.create_task(run_bot(bot_cm, bot_stop), name="run_bot")
+    watch_task = asyncio.create_task(watcher_wrap(), name="run_watch")
+
+    try:
+        await stop.wait()
+    finally:
+        try:
+            await asyncio.wait_for(watch_task, timeout=settings.task_timeout)
+        except TimeoutError:
+            watch_task.cancel()
+            await asyncio.gather(watch_task, return_exceptions=True)
+
+        bot_stop.set()
+
+        try:
+            await asyncio.wait_for(bot_task, timeout=settings.task_timeout)
+        except TimeoutError:
+            bot_task.cancel()
+            await asyncio.gather(bot_task, return_exceptions=True)
+            raise
+
+
+@inject
+async def injected_main(
+    interval: int,
+    stop: asyncio.Event,
+    settings: Settings = Provide[AppContainer.settings],
+    repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
+    event_bus_factory: AsyncContextManager[EventBus] = Provide[
+        AppContainer.event_bus_factory
+    ],
+    notifier: NotifierProtocol = Provide[AppContainer.notifier],
+    sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
+    watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
+    bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
+) -> int:
+    logins = repo.list()
+
+    async with event_bus_factory as event_bus, watcher_factory as watcher:
+        scheduler = DayChangeScheduler(event_bus=event_bus, cron=settings.report_cron)
+        register_notification_handlers(event_bus, notifier, sub_state_repo)
+
+        logger.info(
+            f"Starting watch for logins {', '.join(logins)} with interval {interval}"
+        )
+        try:
+            with stop_on_sigterm(stop):
+                scheduler.start()
+                await run_worker_group(
+                    interval=interval,
+                    stop=stop,
+                    settings=settings,
+                    repo=repo,
+                    watcher=watcher,
+                    bot_cm=bot_cm,
+                )
+        except TimeoutError as exc:
+            log_and_wrap(exc, InfraError, context={"reason": "task_timeout"})
+        except Exception as exc:
+            log_and_wrap(exc, InfraError, context={"reason": "worker_failed"})
+        finally:
+            scheduler.stop()
+        return 0
+
+
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
 def watch(
     interval: int = typer.Option(300, "--interval", help="Poll interval, seconds"),
 ) -> None:
     stop = asyncio.Event()
-
-    tasks: list[asyncio.Task[Any]] = []
-    task_errors: list[BaseException] = []
-
-    async def wait_stop(timeout: int) -> None:
-        await stop.wait()
-        logger.debug("initial timeout for main tasks")
-
-        waiters = [asyncio.wait_for(t, timeout=timeout) for t in tasks]
-        for t in waiters:
-            try:
-                await t
-            except TimeoutError as exc:  # pragma: no cover - defensive logging
-                logger.opt(exception=exc).warning(
-                    f"{t} can't complete with {timeout} s.",
-                )
-
-    def shutdown() -> None:
-        stop.set()
-
-    @inject
-    async def main(
-        settings: Settings = Provide[AppContainer.settings],
-        repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
-        event_bus_factory: AsyncContextManager[EventBus] = Provide[
-            AppContainer.event_bus_factory
-        ],
-        notifier: NotifierProtocol = Provide[AppContainer.notifier],
-        sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
-        watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
-        bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[
-            AppContainer.bot_app
-        ],
-    ) -> int:
-        logins = repo.list()
-
-        async with (
-            event_bus_factory as event_bus,
-            watcher_factory as watcher,
-        ):
-            scheduler = DayChangeScheduler(
-                event_bus=event_bus, cron=settings.report_cron
-            )
-
-            register_notification_handlers(event_bus, notifier, sub_state_repo)
-
-            logger.info(
-                f"Starting watch for logins {', '.join(logins)} with interval {interval}"
-            )
-
-            loop = asyncio.get_event_loop()
-            loop.add_signal_handler(sig=signal.SIGTERM, callback=shutdown)
-
-            bot_stop = asyncio.Event()
-            bot_task = loop.create_task(run_bot(bot_cm, bot_stop), name="run_bot")
-            watcher_task = loop.create_task(
-                run_watch(watcher, repo, interval, stop), name="run_watch"
-            )
-
-            watcher_task.add_done_callback(lambda _: bot_stop.set())
-
-            tasks.extend([bot_task, watcher_task])
-
-            def handle_task_result(task: asyncio.Task[Any]) -> None:
-                try:
-                    exception = task.exception()
-                except asyncio.CancelledError:  # pragma: no cover - cancellation path
-                    return
-                if exception is not None:
-                    task_errors.append(exception)
-                    stop.set()
-
-            for task in tasks:
-                task.add_done_callback(handle_task_result)
-
-            try:
-                scheduler.start()
-                await wait_stop(settings.task_timeout)
-                logger.debug("shutdown")
-                if task_errors:
-                    raise InfraError(
-                        "Worker tasks failed",
-                        context={"errors": [repr(err) for err in task_errors]},
-                    )
-            except Exception as exc:  # pragma: no cover - defensive logging
-                log_and_wrap(
-                    exc,
-                    InfraError,
-                    context={"tasks": [t.get_name() for t in tasks]},
-                )
-            finally:
-                scheduler.stop()
-            return 0
-
-    raise typer.Exit(asyncio.run(entry_point(main())))
+    raise typer.Exit(asyncio.run(entry_point(injected_main(interval, stop))))
 
 
 @app.command("remove", help="Remove a Twitch username from the watchlist")
