@@ -53,6 +53,10 @@ log_cli_date_format = "%H:%M:%S"
 [tool.coverage.run]
 branch = true
 source = ["src"]
+omit = [
+  "*/dependency_injector/*",
+  "*/twitch_subs/infrastructure/event_bus/rabbitmq/*",
+]
 
 [tool.coverage.report]
 skip_covered = true

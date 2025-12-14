@@ -94,7 +94,6 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
 
         container.rabbit_conn.override(providers.Resource(_yield, object()))
         container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
-        container.day_scheduler.override(providers.Resource(_yield, None))
         container.telegram_bot.override(
             providers.Resource(_yield, DummyAiogramBot("token"))
         )
