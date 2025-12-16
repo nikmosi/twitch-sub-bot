@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
+from httpx import ReadTimeout
 from loguru import logger
 
 from twitch_subs.application.error import WatcherRunError
@@ -50,7 +51,13 @@ class Watcher:
         for login in logins:
             if stop_event.is_set():
                 return False
-            status = await self.check_login(login)
+            try:
+                status = await self.check_login(login)
+            except ReadTimeout as e:
+                await self.event_bus.publish(
+                    LoopCheckFailed(logins=(login,), error=str(e))
+                )
+                continue
             curr = status.broadcaster_type
             prev = self.state_repo.get_sub_state(status.login)
             prev_sub = prev.is_subscribed if prev else False
