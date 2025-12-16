@@ -85,12 +85,17 @@ async def test_collector_sends_report_and_resets() -> None:
     repo = StubRepo(
         [
             SubState(
-                "foo",
-                BroadcasterType.AFFILIATE,
+                login="foo",
+                status=BroadcasterType.AFFILIATE,
                 tier=BroadcasterType.AFFILIATE.value,
                 since=None,
             ),
-            SubState("bar", BroadcasterType.NONE, tier=None, since=None),
+            SubState(
+                login="bar",
+                status=BroadcasterType.NONE,
+                tier=None,
+                since=None,
+            ),
         ]
     )
     notifier = StubNotifier()
@@ -103,8 +108,10 @@ async def test_collector_sends_report_and_resets() -> None:
     assert notifier.reports == [
         (
             [
-                LoginReportInfo("bar", BroadcasterType.NONE.value),
-                LoginReportInfo("foo", BroadcasterType.AFFILIATE.value),
+                LoginReportInfo(login="bar", broadcaster=BroadcasterType.NONE.value),
+                LoginReportInfo(
+                    login="foo", broadcaster=BroadcasterType.AFFILIATE.value
+                ),
             ],
             2,
             1,
