@@ -125,9 +125,7 @@ async def test_notifier_notify_about_change_uses_display_name() -> None:
         display_name="FooBar",
         broadcaster_type=BroadcasterType.AFFILIATE,
     )
-    status = LoginStatus(
-        login="foo", broadcaster_type=BroadcasterType.NONE, user=user
-    )
+    status = LoginStatus(login="foo", broadcaster_type=BroadcasterType.NONE, user=user)
 
     await notifier.notify_about_change(status, BroadcasterType.PARTNER)
 

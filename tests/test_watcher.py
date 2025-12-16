@@ -108,9 +108,7 @@ async def test_run_once_detects_subscription_change() -> None:
         broadcaster_type=BroadcasterType.AFFILIATE,
     )
     twitch = FakeTwitch({"foo": user})
-    repo = FakeRepo(
-        [SubState(login="foo", status=BroadcasterType.NONE)]
-    )
+    repo = FakeRepo([SubState(login="foo", status=BroadcasterType.NONE)])
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
@@ -143,9 +141,7 @@ async def test_run_once_stops_when_event_is_set() -> None:
 @pytest.mark.asyncio
 async def test_run_once_handles_subscription_drop() -> None:
     twitch = FakeTwitch({"foo": None})
-    repo = FakeRepo(
-        [SubState(login="foo", status=BroadcasterType.AFFILIATE)]
-    )
+    repo = FakeRepo([SubState(login="foo", status=BroadcasterType.AFFILIATE)])
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 

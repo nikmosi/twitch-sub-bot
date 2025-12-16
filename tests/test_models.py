@@ -1,6 +1,5 @@
 import pytest
 
-import pytest
 from pydantic import ValidationError
 
 from twitch_subs.domain.models import (
