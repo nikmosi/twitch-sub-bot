@@ -28,4 +28,4 @@ class WatchlistService:
 
     def list(self) -> list[str]:
         """Return all logins sorted alphabetically."""
-        return self.repo.list()
+        return self.repo.get_list()
