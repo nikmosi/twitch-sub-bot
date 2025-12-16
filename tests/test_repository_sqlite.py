@@ -49,14 +49,14 @@ def test_subscription_state_crud(tmp_path: Path) -> None:
     db = tmp_path / "sub.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
     st = SubState(
-        "foo",
-        BroadcasterType.AFFILIATE,
+        login="foo",
+        status=BroadcasterType.AFFILIATE,
         since=datetime(2024, 1, 1, tzinfo=timezone.utc),
     )
     repo.upsert_sub_state(st)
     loaded = repo.get_sub_state("foo")
     assert loaded is not None and loaded.is_subscribed
-    st2 = SubState("foo", BroadcasterType.NONE)
+    st2 = SubState(login="foo", status=BroadcasterType.NONE)
     repo.upsert_sub_state(st2)
     loaded2 = repo.get_sub_state("foo")
     assert loaded2 is not None and not loaded2.is_subscribed
@@ -67,8 +67,8 @@ def test_subscription_state_set_many(tmp_path: Path) -> None:
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
     repo.set_many(
         [
-            SubState("a", BroadcasterType.AFFILIATE),
-            SubState("b", BroadcasterType.NONE),
+            SubState(login="a", status=BroadcasterType.AFFILIATE),
+            SubState(login="b", status=BroadcasterType.NONE),
         ]
     )
     rows = repo.list_all()
@@ -78,7 +78,7 @@ def test_subscription_state_set_many(tmp_path: Path) -> None:
 def test_subscription_state_iso(tmp_path: Path) -> None:
     db = tmp_path / "iso.db"
     repo = SqliteSubscriptionStateRepository(f"sqlite:///{db}")
-    repo.upsert_sub_state(SubState("foo", BroadcasterType.PARTNER))
+    repo.upsert_sub_state(SubState(login="foo", status=BroadcasterType.PARTNER))
     with repo.engine.connect() as conn:
         ts = conn.execute(
             text("SELECT updated_at FROM subscription_state")

@@ -252,14 +252,19 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     now = datetime.now(timezone.utc)
     repo.upsert_sub_state(
         SubState(
-            "foo",
-            BroadcasterType.AFFILIATE,
+            login="foo",
+            status=BroadcasterType.AFFILIATE,
             since=now,
             updated_at=now,
         )
     )
     repo.upsert_sub_state(
-        SubState("bar", BroadcasterType.NONE, since=None, updated_at=now)
+        SubState(
+            login="bar",
+            status=BroadcasterType.NONE,
+            since=None,
+            updated_at=now,
+        )
     )
 
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
@@ -274,7 +279,7 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     runner = CliRunner()
     get_result = runner.invoke(cli.app, ["state", "get", "foo"])
     assert get_result.exit_code == 0
-    assert "SubState" in get_result.output
+    assert "login='foo'" in get_result.output
 
     list_result = runner.invoke(cli.app, ["state", "list"])
     assert list_result.exit_code == 0

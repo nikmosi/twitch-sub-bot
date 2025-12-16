@@ -232,7 +232,7 @@ def test_missing_creds() -> None:
 
 
 def test_from_creds() -> None:
-    creds = TwitchAppCreds("cid", "sec")
+    creds = TwitchAppCreds(client_id="cid", client_secret="sec")
     client = TwitchClient.from_creds(creds)
     assert isinstance(client, TwitchClient)
 
