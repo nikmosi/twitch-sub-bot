@@ -118,7 +118,7 @@ async def _add(
 async def _list_cmd(
     repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
 ) -> int:
-    users = repo.list()
+    users = repo.get_list()
     if not users:
         typer.echo("Watchlist is empty. Use 'add' to add usernames.")
         raise typer.Exit(0)
@@ -242,7 +242,7 @@ async def injected_main(
     watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
     bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
 ) -> int:
-    logins = repo.list()
+    logins = repo.get_list()
 
     async with event_bus_factory as event_bus, watcher_factory as watcher:
         scheduler = DayChangeScheduler(event_bus=event_bus, cron=settings.report_cron)

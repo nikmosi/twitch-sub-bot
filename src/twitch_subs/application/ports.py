@@ -66,7 +66,7 @@ class WatchlistRepository(Protocol):
         """
         ...  # pragma: no cover
 
-    def list(self) -> list[str]:
+    def get_list(self) -> list[str]:
         """Return all logins from the watchlist sorted alphabetically."""
         ...  # pragma: no cover
 

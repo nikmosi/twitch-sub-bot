@@ -9,5 +9,5 @@ class WatchListLoginProvider(LoginsProvider):
         self.repo = repo
 
     def get(self) -> list[str]:
-        logins = self.repo.list()
+        logins = self.repo.get_list()
         return logins
