@@ -41,7 +41,7 @@ class Commands:
         for username in usernames:
             if not self.service.add(username):
                 events.append(
-                    UserError(login=username, exception="{username} already present")
+                    UserError(login=username, exception=f"{username} already present")
                 )
             else:
                 events.append(UserAdded(login=username))
