@@ -1,5 +1,6 @@
 import pytest
 
+import pytest
 from pydantic import ValidationError
 
 from twitch_subs.domain.models import (
@@ -10,8 +11,8 @@ from twitch_subs.domain.models import (
 
 
 def test_login_report_info_accepts_enum_and_str() -> None:
-    enum_info = LoginReportInfo("foo", BroadcasterType.PARTNER)
-    str_info = LoginReportInfo("foo", BroadcasterType.PARTNER.value)
+    enum_info = LoginReportInfo(login="foo", broadcaster=BroadcasterType.PARTNER)
+    str_info = LoginReportInfo(login="foo", broadcaster=BroadcasterType.PARTNER.value)
 
     assert enum_info == str_info
     assert enum_info.broadcaster == BroadcasterType.PARTNER
@@ -20,7 +21,7 @@ def test_login_report_info_accepts_enum_and_str() -> None:
 
 def test_login_report_info_none_defaults_to_none() -> None:
     with pytest.raises(ValidationError):
-        LoginReportInfo("bar", None)
+        LoginReportInfo(login="bar", broadcaster=None)
 
 
 @pytest.mark.parametrize(
@@ -42,7 +43,7 @@ def test_sub_state_normalizes_inputs(
     expected_type: BroadcasterType,
     expected_tier: str | None,
 ) -> None:
-    state = SubState("foo", raw_status, tier=tier)
+    state = SubState(login="foo", status=raw_status, tier=tier)
 
     assert state.status is expected_type
     assert state.tier == expected_tier
@@ -51,10 +52,10 @@ def test_sub_state_normalizes_inputs(
 
 def test_sub_state_rejects_boolean_status() -> None:
     with pytest.raises(ValidationError):
-        SubState("foo", True, tier="affiliate")
+        SubState(login="foo", status=True, tier="affiliate")
 
 
 def test_sub_state_accepts_string_status() -> None:
-    state = SubState("foo", "partner")
+    state = SubState(login="foo", status="partner")
     assert state.status is BroadcasterType.PARTNER
     assert state.tier is None
