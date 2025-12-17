@@ -33,3 +33,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     task_timeout: int = 5
+
+    limiter_max_rate: float = 10
+    limiter_time_period: float = 10
