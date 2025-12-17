@@ -20,7 +20,7 @@ jobs:
 
       - name: Set up uv
         uses: astral-sh/setup-uv@v6
-        with: 
+        with:
           enable-cache: true
           cache-suffix: "ci_uv_ruff"
 
