@@ -10,6 +10,7 @@ from aiogram import Bot
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiolimiter import AsyncLimiter
 from dependency_injector import containers, providers
 from sqlalchemy import Engine, create_engine, text
 
@@ -67,8 +68,12 @@ def _build_bot(
 
 
 @asynccontextmanager
-async def _twitch_client_resource(creds: TwitchAppCreds) -> AsyncIterator[TwitchClient]:
-    client = TwitchClient.from_creds(creds)
+async def _twitch_client_resource(
+    creds: TwitchAppCreds, async_limiter: AsyncLimiter | None = None
+) -> AsyncIterator[TwitchClient]:
+    client = TwitchClient(
+        creds.client_id, creds.client_secret, async_limiter=async_limiter
+    )
     try:
         yield client
     finally:
@@ -162,7 +167,14 @@ class AppContainer(containers.DeclarativeContainer):
         client_id=container_config.twitch_client_id,
         client_secret=container_config.twitch_client_secret,
     )
-    twitch_client = providers.Resource(_twitch_client_resource, creds=twitch_creds)
+    async_limiter = providers.Factory(
+        AsyncLimiter,
+        container_config.limiter_max_rate,
+        container_config.limiter_time_period,
+    )
+    twitch_client = providers.Resource(
+        _twitch_client_resource, creds=twitch_creds, async_limiter=async_limiter
+    )
 
     # Telegram
     tg_session = providers.Resource(_aiohttp_session_resource)
