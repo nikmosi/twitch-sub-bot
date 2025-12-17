@@ -1,0 +1,19 @@
+name: pip-audit
+permissions:
+  contents: read
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * *"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pypa/gh-action-pip-audit@v1.1.0
+        with:
+          inputs: .
