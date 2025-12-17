@@ -8,8 +8,8 @@ class MemoryRepo:
     def __init__(self) -> None:
         self.calls = deque()
 
-    def list(self) -> list[str]:
-        self.calls.append("list")
+    def get_list(self) -> list[str]:
+        self.calls.append("get_list")
         return ["b", "a"]
 
 
@@ -22,7 +22,7 @@ def test_watchlist_login_provider_uses_repo() -> None:
     repo = MemoryRepo()
     provider = WatchListLoginProvider(repo)
     assert provider.get() == ["b", "a"]
-    assert list(repo.calls) == ["list"]
+    assert list(repo.calls) == ["get_list"]
 
 
 def test_logins_provider_abc() -> None:

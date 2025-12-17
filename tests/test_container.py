@@ -32,9 +32,12 @@ class FakeBot:
 
 
 class FakeTwitch:
-    def __init__(self, client_id: str, client_secret: str) -> None:
+    def __init__(
+        self, client_id: str, client_secret: str, async_limiter: object | None = None
+    ) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
+        self.async_limiter = async_limiter
         self.closed = False
 
     @classmethod
