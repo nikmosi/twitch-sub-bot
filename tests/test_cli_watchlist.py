@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 import twitch_subs.container as container_mod
 from twitch_subs import cli
 from twitch_subs.application.event_handlers import register_notification_handlers
+from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.config import Settings
 from twitch_subs.domain.events import (
     DayChanged,
@@ -68,6 +69,10 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
 
     stub_bus = StubEventBus()
 
+    class CompatibleWatchlistRepository(SqliteWatchlistRepository):
+        def get_list(self) -> list[str]:
+            return super().list()
+
     class DummyProducer:
         async def __aenter__(self) -> "DummyProducer":
             return self
@@ -92,6 +97,8 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
 
+        repo = CompatibleWatchlistRepository(settings.database_url)
+
         container.rabbit_conn.override(providers.Resource(_yield, object()))
         container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
         container.telegram_bot.override(
@@ -99,6 +106,10 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         )
         container.bot_app.override(providers.Resource(_yield, object()))
         container.producer.override(providers.Resource(_yield, DummyProducer()))
+        container.watchlist_repo.override(providers.Object(repo))
+        container.watchlist_service.override(
+            providers.Factory(WatchlistService, repo=repo)
+        )
         container.watcher.override(providers.Resource(_yield, "watcher"))
         container.settings.override(providers.Object(settings))
 
