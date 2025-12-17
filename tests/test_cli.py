@@ -130,7 +130,7 @@ async def test_run_watch_invokes_watcher() -> None:
             return ["foo"]
 
     watcher = DummyWatcher()
-    repo = SimpleNamespace(list=lambda: ["foo"])
+    repo = SimpleNamespace(get_list=lambda: ["foo"])
     stop = asyncio.Event()
     await cli.run_watch(watcher, repo, interval=1, stop=stop)
     assert watcher.calls == [(["foo"], 1)]
@@ -175,7 +175,7 @@ def test_watch_bot_exception_exitcode(
 ) -> None:
     stub_bus = StubEventBus()
     dummy_notifier = DummyNotifier(DummyAiogramBot("token", object()), "chat")
-    dummy_repo = SimpleNamespace(list=lambda: ["foo"])
+    dummy_repo = SimpleNamespace(get_list=lambda: ["foo"])
     dummy_state_repo = SimpleNamespace(
         get_sub_state=lambda login: SubState(login, BroadcasterType.NONE)
     )
@@ -330,7 +330,7 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
             return None
 
     class FakeRepo:
-        def list(self) -> list[str]:
+        def get_list(self) -> list[str]:
             return ["foo"]
 
     class FakeStateRepo:
@@ -345,7 +345,7 @@ def test_watch_command_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     async def fake_run_watch(
         watcher: Any, repo: Any, interval: int, stop_event: asyncio.Event
     ) -> None:
-        calls["watch"] = (watcher, repo.list(), interval)
+        calls["watch"] = (watcher, repo.get_list(), interval)
         stop_event.set()
 
     async def fake_run_bot(bot_cm: Any, stop_event: asyncio.Event) -> None:

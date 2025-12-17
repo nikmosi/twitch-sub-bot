@@ -63,8 +63,13 @@ class DummyDispatcher:
         self.stopped = True
 
 
+class CompatibleWatchlistRepository(SqliteWatchlistRepository):
+    def get_list(self) -> list[str]:
+        return super().list()
+
+
 def make_service(tmp_path: Path) -> WatchlistService:
-    repo = SqliteWatchlistRepository(f"sqlite:///{tmp_path / 'watch.db'}")
+    repo = CompatibleWatchlistRepository(f"sqlite:///{tmp_path / 'watch.db'}")
     return WatchlistService(repo)
 
 
