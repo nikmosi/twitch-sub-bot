@@ -12,6 +12,7 @@ services:
       - rabbitmq
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+      PYTHONUNBUFFERED: "1"
     stop_grace_period: 20s
     logging:
       driver: local
