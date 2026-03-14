@@ -3,7 +3,8 @@ services:
     tty: true
     build: .
     env_file: .env
-    command: [ "watch" ]
+    command: ["watch"]
+    restart: unless-stopped
     volumes:
       - ./var/:/app/var:rw
       - ./src/:/app/src:rw
@@ -12,6 +13,11 @@ services:
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
     stop_grace_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -22,3 +28,8 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     restart: unless-stopped
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
