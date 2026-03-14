@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timezone
 
-from httpx import ReadTimeout
+import httpx
 from loguru import logger
 
 from twitch_subs.application.error import WatcherRunError
@@ -53,7 +53,7 @@ class Watcher:
                 return False
             try:
                 status = await self.check_login(login)
-            except ReadTimeout as e:
+            except httpx.TimeoutException as e:
                 await self.event_bus.publish(
                     LoopCheckFailed(logins=(login,), error=str(e))
                 )
@@ -101,7 +101,7 @@ class Watcher:
                     await self.event_bus.publish(
                         LoopCheckFailed(logins=tuple(all_logins), error=str(e))
                     )
-                    raise WatcherRunError(logins=tuple(all_logins), error=e) from e
+                    raise WatcherRunError(logins=tuple(all_logins), error=e)
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=interval)
                 except TimeoutError:
