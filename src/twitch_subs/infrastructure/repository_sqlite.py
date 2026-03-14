@@ -76,6 +76,9 @@ class SqliteWatchlistRepository(WatchlistRepository):
             rows = session.execute(stmt).scalars().all()
             return list(rows)
 
+    def get_list(self) -> list[str]:
+        return self.list()
+
     def exists(self, login: str) -> bool:
         with Session(self.engine) as session:
             stmt = select(watchlist.c.login).where(watchlist.c.login == login)
