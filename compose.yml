@@ -16,14 +16,14 @@ services:
     logging:
       driver: local
       options:
-        max-size: "10m"
-        max-file: "5"
+        max-size: "3m"
+        max-file: "2"
 
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "15672:15672" # Management UI
+      - "localhost:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
@@ -31,5 +31,5 @@ services:
     logging:
       driver: local
       options:
-        max-size: "10m"
-        max-file: "5"
+        max-size: "3m"
+        max-file: "2"
