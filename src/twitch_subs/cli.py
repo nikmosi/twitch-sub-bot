@@ -203,6 +203,9 @@ async def run_worker_group(
     async def watcher_wrap() -> None:
         try:
             await run_watch(watcher, repo, interval, stop)
+        except Exception:
+            stop.set()
+            raise
         finally:
             bot_stop.set()
 
