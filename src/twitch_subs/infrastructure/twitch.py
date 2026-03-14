@@ -31,7 +31,7 @@ class TwitchClient(TwitchClientProtocol):
         client_id: str,
         client_secret: str,
         *,
-        timeout: float = 10.0,
+        timeout: float = 20.0,
         async_limiter: AsyncLimiter | None = None,
     ) -> None:
         self.client_id = client_id
