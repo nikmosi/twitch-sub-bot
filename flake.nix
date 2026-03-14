@@ -54,11 +54,8 @@
           default = nixpkgs.legacyPackages.${system}.mkShell {
             shellHook = ''
               ${self.checks.${system}.pre-commit-check.shellHook}
-              export LD_LIBRARY_PATH="$NIX_LD_LIBRARY_PATH:$LD_LIBRARY_PATH"
-              exec ${pkgs.nushell}/bin/nu
             '';
             buildInputs = self.checks.${system}.pre-commit-check.enabledPackages ++ [
-              pkgs.uv
             ];
           };
         }
