@@ -24,7 +24,7 @@ services:
     image: rabbitmq:3-management
     container_name: rabbitmq
     ports:
-      - "localhost:15672:15672"
+      - "127.0.0.1:15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
