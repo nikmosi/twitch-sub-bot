@@ -4,7 +4,7 @@ services:
     tty: true
     build: .
     env_file: .env
-    command: ["watch"]
+    command: [ "watch" ]
     restart: unless-stopped
     volumes:
       - ./var/:/app/var:rw
@@ -14,12 +14,21 @@ services:
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       PYTHONUNBUFFERED: "1"
+
     stop_grace_period: 20s
     logging:
       driver: local
       options:
         max-size: "3m"
         max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 256M
+        reservations:
+          cpus: '0.10'
+          memory: 128M
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -35,3 +44,11 @@ services:
       options:
         max-size: "3m"
         max-file: "2"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
