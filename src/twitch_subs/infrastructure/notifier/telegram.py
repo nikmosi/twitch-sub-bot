@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from collections import defaultdict
 from collections.abc import Sequence
 from itertools import batched, groupby
 
@@ -12,13 +14,18 @@ from twitch_subs.domain.models import (
     LoginReportInfo,
     LoginStatus,
 )
-from twitch_subs.infrastructure.error import AsyncTelegramNotifyError
 
 
 class TelegramNotifier(NotifierProtocol):
     def __init__(self, bot: Bot, chat_id: str):
         self.bot = bot
         self.chat_id = chat_id
+
+        # Buffer: keys are (disable_web_page_preview, disable_notification), values are lists of texts
+        self._buffer: dict[tuple[bool, bool], list[str]] = defaultdict(list)
+        self._flush_task: asyncio.Task[None] | None = None
+        self._flush_timeout = 0.2  # 200 milliseconds
+        self._lock = asyncio.Lock()
 
     async def notify_about_change(
         self, status: LoginStatus, curr: BroadcasterType
@@ -67,13 +74,32 @@ class TelegramNotifier(NotifierProtocol):
         disable_web_page_preview: bool = True,
         disable_notification: bool = False,
     ) -> None:
-        try:
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=text,
-                disable_web_page_preview=disable_web_page_preview,
-                disable_notification=disable_notification,
-            )
-        except Exception as e:
-            logger.opt(exception=e).exception("Telegram send failed")
-            raise AsyncTelegramNotifyError(exception=e) from e
+        async with self._lock:
+            self._buffer[(disable_web_page_preview, disable_notification)].append(text)
+            if self._flush_task is None:
+                self._flush_task = asyncio.create_task(self._flush_buffer_later())
+
+    async def _flush_buffer_later(self) -> None:
+        await asyncio.sleep(self._flush_timeout)
+
+        async with self._lock:
+            # Take a snapshot of the current buffer and reset it
+            buffers_to_send = self._buffer
+            self._buffer = defaultdict(list)
+            self._flush_task = None
+
+        for (preview, notif), texts in buffers_to_send.items():
+            # Send in batches of 100 to avoid exceeding TG limits
+            for batch in batched(texts, n=100):
+                joined_text = "\n".join(batch)
+                try:
+                    await self.bot.send_message(
+                        chat_id=self.chat_id,
+                        text=joined_text,
+                        disable_web_page_preview=preview,
+                        disable_notification=notif,
+                    )
+                except Exception as e:
+                    logger.opt(exception=e).exception(
+                        "Telegram send failed in background worker"
+                    )

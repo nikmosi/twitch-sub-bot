@@ -6,7 +6,6 @@ from loguru import logger
 from twitch_subs.application.error import RepositoryLoginNotFoundError, WatcherRunError
 from twitch_subs.errors import AppError
 from twitch_subs.infrastructure.error import (
-    AsyncTelegramNotifyError,
     NicknameExtractionError,
     InfraError,
     NotificationDeliveryError,
@@ -68,7 +67,7 @@ async def test_console_notifier_logs_and_raises(
 
 
 @pytest.mark.asyncio
-async def test_telegram_notifier_logs_and_raises(
+async def test_telegram_notifier_logs_error_in_background(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingBot:
@@ -78,7 +77,10 @@ async def test_telegram_notifier_logs_and_raises(
     notifier = TelegramNotifier(FailingBot(), "chat")
     caplog.set_level(logging.ERROR)
     sink_id = logger.add(caplog.handler, level="ERROR", format="{message}")
-    with pytest.raises(AsyncTelegramNotifyError):
-        await notifier.send_message("text")
+
+    await notifier.send_message("text")
+    if notifier._flush_task:
+        await notifier._flush_task
+
     logger.remove(sink_id)
     assert "tg boom" in caplog.text

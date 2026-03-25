@@ -16,7 +16,6 @@ from twitch_subs.domain.models import (
     UserRecord,
 )
 from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
-from twitch_subs.infrastructure.error import AsyncTelegramNotifyError
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
@@ -117,6 +116,9 @@ async def test_notifier_notify_report_sorts_and_formats() -> None:
 
     await notifier.notify_report(states, checks=5, errors=1)
 
+    if notifier._flush_task:
+        await notifier._flush_task
+
     assert bot.sent
     message, kwargs = bot.sent[0]
     assert "Checks: <b>5</b>" in message
@@ -139,6 +141,9 @@ async def test_notifier_notify_about_change_uses_display_name() -> None:
 
     await notifier.notify_about_change(status, BroadcasterType.PARTNER)
 
+    if notifier._flush_task:
+        await notifier._flush_task
+
     assert bot.sent
     message, _ = bot.sent[0]
     assert "FooBar" in message
@@ -153,19 +158,29 @@ async def test_notifier_notify_start_and_stop() -> None:
     await notifier.notify_about_start()
     await notifier.notify_about_stop()
 
-    assert len(bot.sent) == 2
+    if notifier._flush_task:
+        await notifier._flush_task
+
+    assert len(bot.sent) == 1
 
 
 @pytest.mark.asyncio
-async def test_notifier_send_message_handles_errors() -> None:
+async def test_notifier_send_message_batches_messages() -> None:
     bot = StubBot()
     notifier = TelegramNotifier(bot, "chat")
 
-    bot.fail_next = True
-    with pytest.raises(AsyncTelegramNotifyError):
-        await notifier.send_message("oops")
+    await notifier.send_message("msg1")
+    await notifier.send_message("msg2")
 
-    assert bot.fail_next is False
+    # Not sent yet
+    assert not bot.sent
+
+    if notifier._flush_task:
+        await notifier._flush_task
+
+    assert len(bot.sent) == 1
+    message, _ = bot.sent[0]
+    assert message == "msg1\nmsg2"
 
 
 def test_run_polling_uses_asyncio_run(
