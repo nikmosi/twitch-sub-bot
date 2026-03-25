@@ -139,6 +139,7 @@ def test_add_list_remove_happy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     res = run(["add", "foo", "-n"], monkeypatch, db)
     assert res.exit_code == 0
+    assert res.output.strip() == "✅ Added foo"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
     assert repo.list() == ["foo"]
     res = run(["list"], monkeypatch, db)
@@ -148,7 +149,7 @@ def test_add_list_remove_happy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert res.exit_code == 0
     assert (
         run(["list"], monkeypatch, db).output.strip()
-        == "Watchlist is empty. Use 'add' to add usernames."
+        == "📭 The watchlist is currently empty. Use the 'add' command to follow some Twitch users."
     )
 
 
@@ -164,7 +165,7 @@ def test_remove_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     db = tmp_path / "wl.db"
     res = run(["remove", "foo", "-n"], monkeypatch, db)
     assert res.exit_code != 0
-    assert "not found" in res.output
+    assert "⚠️ Error: User 'foo' was not found in the watchlist." in res.output
     res = run(["remove", "foo", "--quiet"], monkeypatch, db)
     assert res.exit_code == 0
 

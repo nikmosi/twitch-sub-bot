@@ -11,7 +11,7 @@ class ApplicationError(AppError):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class RepoCantFintLoginError(ApplicationError):
+class RepositoryLoginNotFoundError(ApplicationError):
     login: str
     message: str = field(init=False)
     code: str = field(init=False, default="APP_REPO_LOOKUP_MISSING")
@@ -20,10 +20,7 @@ class RepoCantFintLoginError(ApplicationError):
         object.__setattr__(
             self,
             "message",
-            (
-                "Repository returned None when it should return info about "
-                f"{self.login}."
-            ),
+            f"Login '{self.login}' was not found in the repository.",
         )
         object.__setattr__(self, "context", {"login": self.login})
 

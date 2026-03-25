@@ -22,7 +22,7 @@ from loguru import logger
 
 from twitch_subs.application.ports import Handler
 from twitch_subs.domain.events import DomainEvent
-from twitch_subs.infrastructure.error import ConsumerStopError
+from twitch_subs.infrastructure.error import ConsumerShutdownError
 from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.utils import routing_key_from_type
 
@@ -86,7 +86,7 @@ class Consumer:
             except Exception as exc:
                 log_and_wrap(
                     exc,
-                    ConsumerStopError,
+                    ConsumerShutdownError,
                     context={"stage": "quick_cleanup", "exc_type": type(exc).__name__},
                 )
             return
@@ -141,7 +141,7 @@ class Consumer:
                 except Exception as e:
                     log_and_wrap(
                         e,
-                        ConsumerStopError,
+                        ConsumerShutdownError,
                         context={"stage": "queue_cancel", "exc_type": type(e).__name__},
                     )
                 finally:
@@ -162,7 +162,7 @@ class Consumer:
                 except Exception as e:
                     log_and_wrap(
                         e,
-                        ConsumerStopError,
+                        ConsumerShutdownError,
                         context={
                             "stage": "channel_close",
                             "exc_type": type(e).__name__,

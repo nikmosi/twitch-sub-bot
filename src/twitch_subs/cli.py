@@ -61,7 +61,11 @@ def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     """Validate *value* as a Twitch username or exit with code 2."""
     for value in names:
         if not USERNAME_RE.fullmatch(value):
-            typer.echo("Invalid username format", err=True)
+            typer.echo(
+                "🚫 Error: Invalid Twitch username format. Usernames must be 3-25 alphanumeric "
+                "characters (including underscores).",
+                err=True,
+            )
             raise typer.Exit(2)
     return names
 
@@ -104,9 +108,11 @@ async def _add(
         for batch in batched(usernames, n=10):
             for username in batch:
                 if not service.add(username):
-                    typer.echo(f"{username} already present")
+                    typer.echo(
+                        f"ℹ️ Info: User '{username}' is already in the watchlist."
+                    )
                     continue
-                typer.echo(f"Added {username}")
+                typer.echo(f"✅ Added {username}")
                 if notify:
                     pending_events.append(UserAdded(login=username))
         if pending_events:
@@ -120,7 +126,9 @@ async def _list_cmd(
 ) -> int:
     users = repo.get_list()
     if not users:
-        typer.echo("Watchlist is empty. Use 'add' to add usernames.")
+        typer.echo(
+            "📭 The watchlist is currently empty. Use the 'add' command to follow some Twitch users."
+        )
         raise typer.Exit(0)
     for name in users:
         typer.echo(name)
@@ -141,13 +149,16 @@ async def _remove(
         for username in usernames:
             removed = service.remove(username)
             if removed:
-                typer.echo(f"Removed {username}")
+                typer.echo(f"❌ Removed {username}")
                 if notify:
                     pending_events.append(UserRemoved(login=username))
             else:
                 if quiet:
                     continue
-                typer.echo(f"{username} not found", err=True)
+                typer.echo(
+                    f"⚠️ Error: User '{username}' was not found in the watchlist.",
+                    err=True,
+                )
                 raise typer.Exit(1)
         if pending_events:
             await producer.publish(*pending_events)
@@ -160,7 +171,7 @@ async def _state_get(
 ) -> int:
     state = repo.get_sub_state(login)
     if state is None:
-        typer.echo("not found", err=True)
+        typer.echo(f"🔍 Error: No stored state found for user '{login}'.", err=True)
         raise typer.Exit(1)
     typer.echo(str(state))
     return 0
@@ -172,7 +183,7 @@ async def _state_list(
 ) -> int:
     rows = repo.list_all()
     if not rows:
-        typer.echo("No subscription state found")
+        typer.echo("🔍 No subscription state found")
         raise typer.Exit(0)
     for row in rows:
         typer.echo(str(row))

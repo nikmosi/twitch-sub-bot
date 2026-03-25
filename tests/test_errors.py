@@ -3,14 +3,14 @@ import logging
 import pytest
 from loguru import logger
 
-from twitch_subs.application.error import RepoCantFintLoginError, WatcherRunError
+from twitch_subs.application.error import RepositoryLoginNotFoundError, WatcherRunError
 from twitch_subs.errors import AppError
 from twitch_subs.infrastructure.error import (
     AsyncTelegramNotifyError,
-    CantExtractNicknama,
+    NicknameExtractionError,
     InfraError,
     NotificationDeliveryError,
-    WatchListIsEmpty,
+    WatchlistIsEmpty,
 )
 from twitch_subs.infrastructure.notifier.console import ConsoleNotifier
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
@@ -23,13 +23,13 @@ def test_app_error_str() -> None:
 
 
 def test_infra_error_subclasses() -> None:
-    assert WatchListIsEmpty().message == "Watchlist is empty"
-    assert isinstance(WatchListIsEmpty(), InfraError)
+    assert WatchlistIsEmpty().message.startswith("The watchlist is empty")
+    assert isinstance(WatchlistIsEmpty(), InfraError)
 
 
 def test_application_error_messages_and_context() -> None:
-    repo_error = RepoCantFintLoginError(login="alice")
-    assert repo_error.message.endswith("alice.")
+    repo_error = RepositoryLoginNotFoundError(login="alice")
+    assert "alice" in repo_error.message
     assert repo_error.context == {"login": "alice"}
 
     watcher_error = WatcherRunError(logins=("bob",), error=RuntimeError("boom"))
@@ -40,9 +40,9 @@ def test_application_error_messages_and_context() -> None:
     }
 
 
-def test_cant_extract_nicknama_message_and_context() -> None:
-    error = CantExtractNicknama(nickname="bad url")
-    assert error.message == "Can't extract nickname from bad url"
+def test_nickname_extraction_error_message_and_context() -> None:
+    error = NicknameExtractionError(nickname="bad url")
+    assert "bad url" in error.message
     assert error.context == {"nickname": "bad url"}
 
 

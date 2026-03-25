@@ -10,7 +10,7 @@ from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 import aiocron
 from loguru import logger
 
-from twitch_subs.application.error import RepoCantFintLoginError
+from twitch_subs.application.error import RepositoryLoginNotFoundError
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -52,7 +52,7 @@ class DailyReportCollector:
         for login in sorted(logins):
             state = self.state_repo.get_sub_state(login)
             if state is None:
-                raise RepoCantFintLoginError(login=login)
+                raise RepositoryLoginNotFoundError(login=login)
             report.append(LoginReportInfo(login=login, broadcaster=state.status))
         return report
 

@@ -78,16 +78,21 @@ def test_bot_duplicate_and_missing(tmp_path: Path) -> None:
     bot = TelegramWatchlistBot(StubBot(), "1", service, event_bus=InMemoryEventBus())
     bot.handle_command("/add foo")
 
-    assert type(bot.handle_command("/add foo")[0]) is UserError
-    assert type(bot.handle_command("/remove bar")[0]) is UserError
+    err1 = bot.handle_command("/add foo")[0]
+    assert type(err1) is UserError
+    assert "already in the watchlist" in err1.exception
+
+    err2 = bot.handle_command("/remove bar")[0]
+    assert type(err2) is UserError
+    assert "not found in the watchlist" in err2.exception
 
 
 def test_handle_command_unknown(tmp_path: Path) -> None:
     bot = TelegramWatchlistBot(
         StubBot(), "1", make_service(tmp_path), event_bus=InMemoryEventBus()
     )
-    assert bot.handle_command("/foo") == "Unknown command"
-    assert bot.handle_command("/list") == "Watchlist is empty"
+    assert bot.handle_command("/foo") == "❓ Unknown command"
+    assert bot.handle_command("/list") == "📭 Watchlist is empty"
 
 
 def test_handle_list_with_users(tmp_path: Path) -> None:

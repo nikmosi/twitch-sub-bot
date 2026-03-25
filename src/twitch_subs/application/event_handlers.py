@@ -35,7 +35,7 @@ def register_notification_handlers(
 
     async def notify_about_error(event: UserError) -> None:
         await notifier.send_message(
-            f"Error: with {event.login} occur - {event.exception}"
+            f"⚠️ Error with <code>{event.login}</code>: {event.exception}"
         )
 
     async def notify_about_add(event: UserAdded) -> None:

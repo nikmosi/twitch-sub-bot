@@ -13,7 +13,7 @@ from loguru import logger
 from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
-from twitch_subs.infrastructure.error import CantExtractNicknama
+from twitch_subs.infrastructure.error import NicknameExtractionError
 
 from .filters import IDFilter
 
@@ -24,7 +24,7 @@ def to_usernames(text: str) -> list[str]:
     for i in text.split(" "):
         match_ = re.search(pattern, i)
         if not match_:
-            raise CantExtractNicknama(nickname=i)
+            raise NicknameExtractionError(nickname=i)
         nickname = match_.group(1)
         res.append(nickname)
 
@@ -41,7 +41,7 @@ class Commands:
         for username in usernames:
             if not self.service.add(username):
                 events.append(
-                    UserError(login=username, exception=f"{username} already present")
+                    UserError(login=username, exception="is already in the watchlist ℹ️")
                 )
             else:
                 events.append(UserAdded(login=username))
@@ -51,10 +51,10 @@ class Commands:
         events: list[DomainEvent] = []
         for username in usernames:
             if self.service.remove(username):
-                events.append(UserRemoved(login=f"Removed {username}"))
+                events.append(UserRemoved(login=username))
             else:
                 events.append(
-                    UserError(login=username, exception=f"{username} not found")
+                    UserError(login=username, exception="not found in the watchlist ⚠️")
                 )
         return events
 
@@ -71,7 +71,7 @@ class Commands:
         users = self._create_users_list()
         if users:
             return "\n".join(text + users)
-        return "Watchlist is empty"
+        return "📭 Watchlist is empty"
 
     def handle_command(self, text: str) -> list[DomainEvent] | str:
         parts = text.strip().split(maxsplit=1)
@@ -83,7 +83,7 @@ class Commands:
             return self.remove(to_usernames(arg))
         if cmd == "/list" and not arg:
             return self.get_list()
-        return "Unknown command"
+        return "❓ Unknown command"
 
     pass
 
@@ -115,12 +115,12 @@ class TelegramWatchlistBot:
     async def _cmd_add(self, message: types.Message) -> None:
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) < 2:
-            await message.answer("Usage: /add <username>...")
+            await message.answer("ℹ️ Usage: /add <username>...")
             return
         arg = parts[1].strip()
         try:
             usernames = to_usernames(arg)
-        except CantExtractNicknama as e:
+        except NicknameExtractionError as e:
             logger.opt(exception=e).warning(e.message)
             await self.bus.publish(UserError(login=e.nickname, exception=e.message))
         else:
@@ -130,12 +130,12 @@ class TelegramWatchlistBot:
     async def _cmd_remove(self, message: types.Message) -> None:
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) < 2:
-            await message.answer("Usage: /remove <username>...")
+            await message.answer("ℹ️ Usage: /remove <username>...")
             return
         arg = parts[1].strip()
         try:
             usernames = to_usernames(arg)
-        except CantExtractNicknama as e:
+        except NicknameExtractionError as e:
             logger.opt(exception=e).warning(e.message)
             await self.bus.publish(UserError(login=e.nickname, exception=e.message))
         else:

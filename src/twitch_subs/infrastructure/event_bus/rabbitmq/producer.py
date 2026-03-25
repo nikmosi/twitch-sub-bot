@@ -17,7 +17,7 @@ from aio_pika.abc import (
 from loguru import logger
 
 from twitch_subs.domain.events import DomainEvent
-from twitch_subs.infrastructure.error import ProducerCloseError
+from twitch_subs.infrastructure.error import ProducerShutdownError
 from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.utils import (
     routing_key_from_type,
@@ -66,7 +66,7 @@ class Producer:
             except Exception as e:
                 log_and_wrap(
                     e,
-                    ProducerCloseError,
+                    ProducerShutdownError,
                     context={"stage": "channel_close", "exc_type": type(e).__name__},
                 )
             finally:
