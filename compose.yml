@@ -2,8 +2,14 @@
 services:
   bot:
     tty: true
-    build: .
+    build:
+      context: .
+      args:
+        APP_USER: ${APP_USER:-twitchbot}
+        APP_UID: ${APP_UID:-10123}
+        APP_GID: ${APP_GID:-10123}
     env_file: .env
+    user: "${APP_UID:-10123}:${APP_GID:-10123}"
     command: [ "watch" ]
     restart: unless-stopped
     volumes:
