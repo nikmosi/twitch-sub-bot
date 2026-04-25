@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 import httpx
 from aiolimiter import AsyncLimiter
@@ -49,19 +49,25 @@ class TwitchClient(TwitchClientProtocol):
     def from_creds(cls, creds: TwitchAppCreds) -> "TwitchClient":
         return cls(creds.client_id, creds.client_secret)
 
-    async def get_user_by_login(self, login: str) -> UserRecord | None:
+    async def get_user_by_login(
+        self, login: str | Sequence[str]
+    ) -> Sequence[UserRecord]:
         data = await self._get("/helix/users", params={"login": login})
         items = data.get("data", [])
+        users: list[UserRecord] = []
         if not items:
-            return None
-        u = items[0]
-        btype = u.get("broadcaster_type") or BroadcasterType.NONE.value
-        return UserRecord(
-            id=u["id"],
-            login=u["login"],
-            display_name=u.get("display_name", u["login"]),
-            broadcaster_type=BroadcasterType(btype),
-        )
+            return users
+        for u in items:
+            btype = u.get("broadcaster_type") or BroadcasterType.NONE.value
+            users.append(
+                UserRecord(
+                    id=u["id"],
+                    login=u["login"],
+                    display_name=u.get("display_name", u["login"]),
+                    broadcaster_type=BroadcasterType(btype),
+                )
+            )
+        return users
 
     async def _get(
         self, path: str, *, params: dict[str, Any] | None = None

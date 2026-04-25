@@ -25,8 +25,8 @@ class EventBus(Protocol):
 
 class TwitchClientProtocol(Protocol):
     async def get_user_by_login(
-        self, login: str
-    ) -> UserRecord | None: ...  # pragma: no cover
+        self, login: str | Sequence[str]
+    ) -> Sequence[UserRecord]: ...  # pragma: no cover
 
 
 class NotifierProtocol(Protocol):

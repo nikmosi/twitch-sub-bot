@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timezone
+from itertools import batched
 
 import httpx
 from loguru import logger
@@ -15,7 +16,7 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserBecomeSubscribtable,
 )
-from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
+from twitch_subs.domain.models import LoginStatus, SubState
 
 from .ports import (
     EventBus,
@@ -40,44 +41,57 @@ class Watcher:
         self.state_repo = state_repo
         self.event_bus = event_bus
 
-    async def check_login(self, login: str) -> LoginStatus:
-        user = await self.twitch.get_user_by_login(login)
-        btype = BroadcasterType.NONE if user is None else user.broadcaster_type
-        return LoginStatus(login=login, broadcaster_type=btype, user=user)
+    async def check_logins(self, logins: str | Sequence[str]) -> Sequence[LoginStatus]:
+        if isinstance(logins, str):
+            logins = [logins]
+        statuses: list[LoginStatus] = []
+        for login_batch in batched(logins, n=100):
+            users = await self.twitch.get_user_by_login(login_batch)
+            if not users:
+                continue
+            for user in users:
+                statuses.append(
+                    LoginStatus(
+                        login=user.login,
+                        broadcaster_type=user.broadcaster_type,
+                        user=user,
+                    )
+                )
+        return statuses
 
-    async def run_once(self, logins: Sequence[str], stop_event: asyncio.Event) -> bool:
+    async def run_once(self, logins: Sequence[str]) -> bool:
         changed = False
         updates: list[SubState] = []
-        for login in logins:
-            if stop_event.is_set():
-                return False
-            try:
-                status = await self.check_login(login)
-            except httpx.TimeoutException as e:
-                await self.event_bus.publish(
-                    LoopCheckFailed(logins=(login,), error=str(e))
-                )
-                continue
-            curr = status.broadcaster_type
-            prev = self.state_repo.get_sub_state(status.login)
-            prev_sub = prev.is_subscribed if prev else False
-            curr_sub = curr.is_subscribable()
-            if prev_sub != curr_sub:
-                changed = True
-                if curr_sub:
-                    await self.event_bus.publish(
-                        UserBecomeSubscribtable(
-                            login=login,
-                            current_state=curr,
+
+        try:
+            statuses = await self.check_logins(logins)
+        except httpx.TimeoutException as e:
+            await self.event_bus.publish(LoopCheckFailed(logins=logins, error=str(e)))
+        else:
+            for status in statuses:
+                curr = status.broadcaster_type
+                prev = self.state_repo.get_sub_state(status.login)
+                prev_sub = prev.is_subscribed if prev else False
+                curr_sub = curr.is_subscribable()
+                if prev_sub != curr_sub:
+                    changed = True
+                    if curr_sub:
+                        await self.event_bus.publish(
+                            UserBecomeSubscribtable(
+                                login=status.login,
+                                current_state=curr,
+                            )
                         )
-                    )
-            since = (
-                prev.since
-                if prev and prev_sub and curr_sub
-                else (datetime.now(timezone.utc) if curr_sub else None)
-            )
-            updates.append(SubState(login=status.login, status=curr, since=since))
-            await self.event_bus.publish(OnceChecked(login=login, current_state=curr))
+                since = (
+                    prev.since
+                    if prev and prev_sub and curr_sub
+                    else (datetime.now(timezone.utc) if curr_sub else None)
+                )
+                updates.append(SubState(login=status.login, status=curr, since=since))
+                await self.event_bus.publish(
+                    OnceChecked(login=status.login, current_state=curr)
+                )
+
         self.state_repo.set_many(updates)
         await self.event_bus.publish(LoopChecked(logins=logins))
         return changed
