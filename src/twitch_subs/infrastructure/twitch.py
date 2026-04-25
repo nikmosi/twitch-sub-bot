@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from itertools import batched
 from typing import Any, Sequence
 
 import httpx
@@ -36,6 +37,7 @@ class TwitchClient(TwitchClientProtocol):
     ) -> None:
         self.client_id = client_id
         self.client_secret = client_secret
+        self._logins_per_request_limit = 100
         if not self.client_id or not self.client_secret:
             raise TwitchAuthError(
                 "TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set"
@@ -52,21 +54,27 @@ class TwitchClient(TwitchClientProtocol):
     async def get_user_by_login(
         self, login: str | Sequence[str]
     ) -> Sequence[UserRecord]:
-        data = await self._get("/helix/users", params={"login": login})
-        items = data.get("data", [])
+        if isinstance(login, str):
+            login = [login]
+
         users: list[UserRecord] = []
-        if not items:
-            return users
-        for u in items:
-            btype = u.get("broadcaster_type") or BroadcasterType.NONE.value
-            users.append(
-                UserRecord(
-                    id=u["id"],
-                    login=u["login"],
-                    display_name=u.get("display_name", u["login"]),
-                    broadcaster_type=BroadcasterType(btype),
+        for batch in batched(login, n=self._logins_per_request_limit):
+            data = await self._get("/helix/users", params={"login": batch})
+            items = data.get("data", [])
+            if not items:
+                continue
+
+            for u in items:
+                btype = u.get("broadcaster_type") or BroadcasterType.NONE.value
+                users.append(
+                    UserRecord(
+                        id=u["id"],
+                        login=u["login"],
+                        display_name=u.get("display_name", u["login"]),
+                        broadcaster_type=BroadcasterType(btype),
+                    )
                 )
-            )
+
         return users
 
     async def _get(

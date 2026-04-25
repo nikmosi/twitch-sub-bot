@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from itertools import batched
 
 import httpx
 from loguru import logger
@@ -45,18 +44,18 @@ class Watcher:
         if isinstance(logins, str):
             logins = [logins]
         statuses: list[LoginStatus] = []
-        for login_batch in batched(logins, n=100):
-            users = await self.twitch.get_user_by_login(login_batch)
-            if not users:
-                continue
-            for user in users:
-                statuses.append(
-                    LoginStatus(
-                        login=user.login,
-                        broadcaster_type=user.broadcaster_type,
-                        user=user,
-                    )
+        users = await self.twitch.get_user_by_login(logins)
+        if not users:
+            logger.warning("got empty users list")
+            return []
+        for user in users:
+            statuses.append(
+                LoginStatus(
+                    login=user.login,
+                    broadcaster_type=user.broadcaster_type,
+                    user=user,
                 )
+            )
         return statuses
 
     async def run_once(self, logins: Sequence[str]) -> bool:
