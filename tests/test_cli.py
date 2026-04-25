@@ -177,7 +177,9 @@ def test_watch_bot_exception_exitcode(
     dummy_notifier = DummyNotifier(DummyAiogramBot("token", object()), "chat")
     dummy_repo = SimpleNamespace(get_list=lambda: ["foo"])
     dummy_state_repo = SimpleNamespace(
-        get_sub_state=lambda login: SubState(login, BroadcasterType.NONE)
+        get_sub_state=lambda login: SubState(
+            login=login, broadcaster_type=BroadcasterType.NONE
+        )
     )
 
     class DummyWatcher:
@@ -253,7 +255,7 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     repo.upsert_sub_state(
         SubState(
             login="foo",
-            status=BroadcasterType.AFFILIATE,
+            broadcaster_type=BroadcasterType.AFFILIATE,
             since=now,
             updated_at=now,
         )
@@ -261,8 +263,8 @@ def test_state_get_and_list(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> 
     repo.upsert_sub_state(
         SubState(
             login="bar",
-            status=BroadcasterType.NONE,
-            since=None,
+            broadcaster_type=BroadcasterType.NONE,
+            since=now,
             updated_at=now,
         )
     )

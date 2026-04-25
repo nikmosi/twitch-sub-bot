@@ -100,7 +100,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
     def _row_to_state(self, row: Any) -> SubState:
         return SubState(
             login=row["login"],
-            status=BroadcasterType(row["status"]),
+            broadcaster_type=BroadcasterType(row["status"]),
             since=datetime.fromisoformat(row["since"]) if row["since"] else None,
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
@@ -116,7 +116,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
     def upsert_sub_state(self, state: SubState) -> None:
         values = {
             "login": state.login,
-            "status": state.status.value,
+            "status": state.broadcaster_type.value,
             "since": state.since.isoformat() if state.since else None,
             "updated_at": state.updated_at.isoformat(),
         }
@@ -137,7 +137,7 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
         values = [
             {
                 "login": s.login,
-                "status": s.status.value,
+                "status": s.broadcaster_type.value,
                 "since": s.since.isoformat() if s.since else None,
                 "updated_at": s.updated_at.isoformat(),
             }

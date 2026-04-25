@@ -1,60 +1,44 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from pydantic import ValidationError
 
 from twitch_subs.domain.models import (
     BroadcasterType,
-    LoginReportInfo,
     SubState,
 )
 
 
-def test_login_report_info_accepts_enum_and_str() -> None:
-    enum_info = LoginReportInfo(login="foo", broadcaster=BroadcasterType.PARTNER)
-    str_info = LoginReportInfo(login="foo", broadcaster=BroadcasterType.PARTNER.value)
-
-    assert enum_info == str_info
-    assert enum_info.broadcaster == BroadcasterType.PARTNER
-    assert enum_info.broadcaster is BroadcasterType.PARTNER
-
-
-def test_login_report_info_none_defaults_to_none() -> None:
-    with pytest.raises(ValidationError):
-        LoginReportInfo(login="bar", broadcaster=None)
-
-
 @pytest.mark.parametrize(
-    "raw_status, tier, expected_type, expected_tier",
+    "raw_broadcaster_type, expected_type",
     [
-        (
-            BroadcasterType.AFFILIATE,
-            BroadcasterType.AFFILIATE.value,
-            BroadcasterType.AFFILIATE,
-            BroadcasterType.AFFILIATE.value,
-        ),
-        (BroadcasterType.NONE, None, BroadcasterType.NONE, None),
-        ("partner", None, BroadcasterType.PARTNER, None),
+        (BroadcasterType.AFFILIATE, BroadcasterType.AFFILIATE),
+        (BroadcasterType.NONE, BroadcasterType.NONE),
+        ("partner", BroadcasterType.PARTNER),
     ],
 )
 def test_sub_state_normalizes_inputs(
-    raw_status: BroadcasterType | str,
-    tier: str | None,
+    raw_broadcaster_type: BroadcasterType | str,
     expected_type: BroadcasterType,
-    expected_tier: str | None,
 ) -> None:
-    state = SubState(login="foo", status=raw_status, tier=tier)
+    state = SubState(login="foo", broadcaster_type=raw_broadcaster_type)
 
-    assert state.status is expected_type
-    assert state.tier == expected_tier
+    assert state.broadcaster_type is expected_type
     assert state.is_subscribed is expected_type.is_subscribable()
 
 
 def test_sub_state_rejects_boolean_status() -> None:
     with pytest.raises(ValidationError):
-        SubState(login="foo", status=True, tier="affiliate")
+        SubState(login="foo", broadcaster_type=True)
 
 
 def test_sub_state_accepts_string_status() -> None:
-    state = SubState(login="foo", status="partner")
-    assert state.status is BroadcasterType.PARTNER
-    assert state.tier is None
+    state = SubState(login="foo", broadcaster_type="partner")
+    assert state.broadcaster_type is BroadcasterType.PARTNER
+
+
+def test_sub_state_since_defaults_to_current_utc() -> None:
+    state = SubState(login="foo")
+    assert isinstance(state.since, datetime)
+    assert state.since.tzinfo == timezone.utc

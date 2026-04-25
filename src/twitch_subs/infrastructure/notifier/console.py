@@ -8,11 +8,7 @@ from itertools import batched
 from loguru import logger
 
 from twitch_subs.application.ports import NotifierProtocol
-from twitch_subs.domain.models import (
-    BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
-)
+from twitch_subs.domain.models import BroadcasterType, SubState
 from twitch_subs.infrastructure.error import NotificationDeliveryError
 
 _TAG_RE = re.compile(r"</?b>|</?code>|</?i>|</?u>")
@@ -32,13 +28,14 @@ class ConsoleNotifier(NotifierProtocol):
         self._loop: asyncio.AbstractEventLoop | None = None
 
     async def notify_about_change(
-        self, status: LoginStatus, curr: BroadcasterType
+        self,
+        login: str,
+        curr: BroadcasterType,
+        display_name: str | None = None,
     ) -> None:
-        user = status.user
-        display = user.display_name if user else status.login
+        display = display_name or login
         badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
         subflag = "да" if curr.is_subscribable() else "нет"
-        login = status.login
         text = (
             f"{badge} {display} (https://www.twitch.tv/{login}) стал {curr.value}\n"
             f"Подписка доступна: {subflag}\n"
@@ -54,7 +51,7 @@ class ConsoleNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        states: Sequence[LoginReportInfo],
+        states: Sequence[SubState],
         checks: int,
         errors: int,
     ) -> None:
@@ -64,7 +61,7 @@ class ConsoleNotifier(NotifierProtocol):
         lines.append(f"Errors: {errors}")
         lines.append("Statuses:")
         for info in sorted(states, key=lambda item: item.login):
-            broadcaster = info.broadcaster
+            broadcaster = info.broadcaster_type
             lines.append(
                 f"• {broadcaster.value:>8} {info.login} (https://www.twitch.tv/{info.login})"
             )

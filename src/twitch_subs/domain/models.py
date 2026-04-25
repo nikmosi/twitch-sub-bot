@@ -32,26 +32,12 @@ class UserRecord(ConfiguredBaseModel):
     broadcaster_type: BroadcasterType
 
 
-class LoginStatus(ConfiguredBaseModel):
-    """Result of a single login check."""
-
-    login: str
-    broadcaster_type: BroadcasterType
-    user: UserRecord | None
-
-
 class SubState(ConfiguredBaseModel):
     login: str
-    status: BroadcasterType = BroadcasterType.NONE
+    broadcaster_type: BroadcasterType = BroadcasterType.NONE
     since: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    tier: str | None = None
 
     @property
     def is_subscribed(self) -> bool:
-        return self.status.is_subscribable()
-
-
-class LoginReportInfo(ConfiguredBaseModel):
-    login: str
-    broadcaster: BroadcasterType = field(default=BroadcasterType.NONE)
+        return self.broadcaster_type.is_subscribable()

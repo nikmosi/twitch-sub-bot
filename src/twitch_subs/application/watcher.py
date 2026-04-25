@@ -14,8 +14,7 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserBecomeSubscribtable,
 )
-from twitch_subs.domain.mapper import user_record_to_login_status
-from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
+from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 
 from .ports import (
     EventBus,
@@ -40,7 +39,7 @@ class Watcher:
         self.state_repo = state_repo
         self.event_bus = event_bus
 
-    async def check_logins(self, logins: str | Sequence[str]) -> Sequence[LoginStatus]:
+    async def check_logins(self, logins: str | Sequence[str]) -> Sequence[UserRecord]:
         if isinstance(logins, str):
             logins = [logins]
         users = await self.twitch.get_user_by_login(logins)
@@ -49,12 +48,12 @@ class Watcher:
             logger.warning("got empty users list")
             return []
 
-        return [user_record_to_login_status(user) for user in users]
+        return users
 
-    def _get_sub_state_or_default(self, login: str) -> SubState:
-        prev = self.state_repo.get_sub_state(login)
+    def _get_sub_state_or_default(self, ur: UserRecord) -> SubState:
+        prev = self.state_repo.get_sub_state(ur.login)
         if not prev:
-            prev = SubState(login=login)
+            prev = SubState(login=ur.login, broadcaster_type=ur.broadcaster_type)
         return prev
 
     def _is_user_become_subscribtable(
@@ -69,27 +68,31 @@ class Watcher:
         updates: list[SubState] = []
 
         try:
-            statuses = await self.check_logins(logins)
+            users = await self.check_logins(logins)
         except httpx.TimeoutException as e:
             await self.event_bus.publish(LoopCheckFailed(logins=logins, error=str(e)))
         else:
-            for status in statuses:
-                curr = status.broadcaster_type
-                prev = self._get_sub_state_or_default(status.login)
+            for user in users:
+                curr = user.broadcaster_type
+                prev = self._get_sub_state_or_default(user)
 
                 if self._is_user_become_subscribtable(prev, curr):
                     await self.event_bus.publish(
                         UserBecomeSubscribtable(
-                            login=status.login,
+                            login=user.login,
                             current_state=curr,
                         )
                     )
 
-                sub_state = SubState(login=status.login, status=curr, since=prev.since)
+                sub_state = SubState(
+                    login=user.login,
+                    broadcaster_type=curr,
+                    since=prev.since,
+                )
                 updates.append(sub_state)
 
                 await self.event_bus.publish(
-                    OnceChecked(login=status.login, current_state=curr)
+                    OnceChecked(login=user.login, current_state=curr)
                 )
 
         self.state_repo.set_many(updates)

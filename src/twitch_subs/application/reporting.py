@@ -17,7 +17,7 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
 )
 from twitch_subs.domain.events import DayChanged, LoopChecked, LoopCheckFailed
-from twitch_subs.domain.models import LoginReportInfo
+from twitch_subs.domain.models import SubState
 
 
 @dataclass(slots=True)
@@ -47,13 +47,13 @@ class DailyReportCollector:
         states = self._collect_states(self.tracked_logins)
         await self.notifier.notify_report(states, self.checks, self.errors)
 
-    def _collect_states(self, logins: Iterable[str]) -> list[LoginReportInfo]:
-        report: list[LoginReportInfo] = []
+    def _collect_states(self, logins: Iterable[str]) -> list[SubState]:
+        report: list[SubState] = []
         for login in sorted(logins):
             state = self.state_repo.get_sub_state(login)
             if state is None:
                 raise RepositoryLoginNotFoundError(login=login)
-            report.append(LoginReportInfo(login=login, broadcaster=state.status))
+            report.append(state)
         return report
 
     def _reset(self) -> None:

@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from collections.abc import Iterable
 
 import pytest
@@ -13,7 +14,7 @@ from twitch_subs.application.ports import (
     SubscriptionStateRepo,
 )
 from twitch_subs.domain.events import DayChanged, LoopCheckFailed, LoopChecked
-from twitch_subs.domain.models import BroadcasterType, LoginReportInfo, SubState
+from twitch_subs.domain.models import BroadcasterType, SubState
 
 
 class StubRepo(SubscriptionStateRepo):
@@ -33,10 +34,10 @@ class StubRepo(SubscriptionStateRepo):
 
 class StubNotifier(NotifierProtocol):
     def __init__(self) -> None:
-        self.reports: list[tuple[list[LoginReportInfo], int, int]] = []
+        self.reports: list[tuple[list[SubState], int, int]] = []
 
     async def notify_about_change(
-        self, status, curr
+        self, login, curr, display_name=None
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
@@ -82,19 +83,18 @@ class StubCron:
 
 @pytest.mark.asyncio
 async def test_collector_sends_report_and_resets() -> None:
+    now = datetime.now(timezone.utc)
     repo = StubRepo(
         [
             SubState(
                 login="foo",
-                status=BroadcasterType.AFFILIATE,
-                tier=BroadcasterType.AFFILIATE.value,
-                since=None,
+                broadcaster_type=BroadcasterType.AFFILIATE,
+                since=now,
             ),
             SubState(
                 login="bar",
-                status=BroadcasterType.NONE,
-                tier=None,
-                since=None,
+                broadcaster_type=BroadcasterType.NONE,
+                since=now,
             ),
         ]
     )
@@ -105,18 +105,14 @@ async def test_collector_sends_report_and_resets() -> None:
     await collector.handle_loop_failed(LoopCheckFailed(logins=("bar",), error="boom"))
     await collector.handle_day_changed(DayChanged())
 
-    assert notifier.reports == [
-        (
-            [
-                LoginReportInfo(login="bar", broadcaster=BroadcasterType.NONE.value),
-                LoginReportInfo(
-                    login="foo", broadcaster=BroadcasterType.AFFILIATE.value
-                ),
-            ],
-            2,
-            1,
-        )
+    assert len(notifier.reports) == 1
+    states, checks, errors = notifier.reports[0]
+    assert [(state.login, state.broadcaster_type) for state in states] == [
+        ("bar", BroadcasterType.NONE),
+        ("foo", BroadcasterType.AFFILIATE),
     ]
+    assert all(state.since == now for state in states)
+    assert (checks, errors) == (2, 1)
     assert collector.checks == 0
     assert collector.errors == 0
     assert collector.tracked_logins == set()

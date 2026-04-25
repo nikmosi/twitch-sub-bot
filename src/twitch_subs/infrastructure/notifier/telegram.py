@@ -9,11 +9,7 @@ from aiogram import Bot
 from loguru import logger
 
 from twitch_subs.application.ports import NotifierProtocol
-from twitch_subs.domain.models import (
-    BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
-)
+from twitch_subs.domain.models import BroadcasterType, SubState
 
 
 class TelegramNotifier(NotifierProtocol):
@@ -28,13 +24,14 @@ class TelegramNotifier(NotifierProtocol):
         self._lock = asyncio.Lock()
 
     async def notify_about_change(
-        self, status: LoginStatus, curr: BroadcasterType
+        self,
+        login: str,
+        curr: BroadcasterType,
+        display_name: str | None = None,
     ) -> None:
-        user = status.user
-        display = user.display_name if user else status.login
+        display = display_name or login
         badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
         subflag = "да" if curr.is_subscribable() else "нет"
-        login = status.login
         text = (
             f'{badge} <a href="https://www.twitch.tv/{login}">{display}</a> стал <b>{curr.value}</b>\n'
             f"Подписка доступна: <b>{subflag}</b>\n"
@@ -50,7 +47,7 @@ class TelegramNotifier(NotifierProtocol):
 
     async def notify_report(
         self,
-        states: Sequence[LoginReportInfo],
+        states: Sequence[SubState],
         checks: int,
         errors: int,
     ) -> None:
@@ -58,8 +55,10 @@ class TelegramNotifier(NotifierProtocol):
         text.append(f"Checks: <b>{checks}</b>")
         text.append(f"Errors: <b>{errors}</b>")
         text.append("Statuses:")
-        sorted_states = sorted(states, key=lambda state: state.broadcaster)
-        for key, group in groupby(sorted_states, key=lambda state: state.broadcaster):
+        sorted_states = sorted(states, key=lambda state: state.broadcaster_type)
+        for key, group in groupby(
+            sorted_states, key=lambda state: state.broadcaster_type
+        ):
             text.append(f"• <b>{key}</b> ")
             for info in sorted(group, key=lambda item: item.login):
                 text.append(

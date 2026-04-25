@@ -73,7 +73,7 @@ class FakeNotifier(NotifierProtocol):
         self.stopped = 0
 
     async def notify_about_change(
-        self, status, curr
+        self, login, curr, display_name=None
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
@@ -114,17 +114,16 @@ async def test_run_once_detects_subscription_change() -> None:
         broadcaster_type=BroadcasterType.AFFILIATE,
     )
     twitch = FakeTwitch({"foo": user})
-    repo = FakeRepo([SubState(login="foo", status=BroadcasterType.NONE)])
+    repo = FakeRepo([SubState(login="foo", broadcaster_type=BroadcasterType.NONE)])
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    changed = await watcher.run_once(["foo"])
+    await watcher.run_once(["foo"])
 
-    assert changed is True
     assert isinstance(bus.events[0], UserBecomeSubscribtable)
     assert isinstance(bus.events[1], OnceChecked)
     assert isinstance(bus.events[-1], LoopChecked)
-    assert repo._states["foo"].status is BroadcasterType.AFFILIATE
+    assert repo._states["foo"].broadcaster_type is BroadcasterType.AFFILIATE
     assert repo.set_many_calls
 
 
@@ -135,9 +134,8 @@ async def test_run_once_skips_missing_users() -> None:
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    changed = await watcher.run_once(["foo"])
+    await watcher.run_once(["foo"])
 
-    assert changed is False
     assert repo.set_many_calls == [[]]
     assert len(bus.events) == 1
     assert isinstance(bus.events[0], LoopChecked)
@@ -146,13 +144,12 @@ async def test_run_once_skips_missing_users() -> None:
 @pytest.mark.asyncio
 async def test_run_once_ignores_missing_user_for_existing_state() -> None:
     twitch = FakeTwitch({"foo": None})
-    repo = FakeRepo([SubState(login="foo", status=BroadcasterType.AFFILIATE)])
+    repo = FakeRepo([SubState(login="foo", broadcaster_type=BroadcasterType.AFFILIATE)])
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    changed = await watcher.run_once(["foo"])
+    await watcher.run_once(["foo"])
 
-    assert changed is False
     assert not any(isinstance(event, UserBecomeSubscribtable) for event in bus.events)
     assert repo._states["foo"].is_subscribed is True
     assert len(bus.events) == 1

@@ -69,7 +69,7 @@ async def test_get_user_by_login_ok(
         **_: Any,
     ) -> FakeResp:  # type: ignore[override]
         assert path == "/helix/users"
-        assert params == {"login": "foo"}
+        assert params == {"login": ("foo",)}
         assert headers["Authorization"].startswith("Bearer ")
         return FakeResp(
             200, {"data": [{"id": "1", "login": "foo", "broadcaster_type": "partner"}]}

@@ -82,7 +82,7 @@ def test_subscription_state_repo_protocol_subclass() -> None:
                 self.data[st.login] = st
 
     repo = Impl()
-    st = SubState(login="foo", status=BroadcasterType.AFFILIATE)
+    st = SubState(login="foo", broadcaster_type=BroadcasterType.AFFILIATE)
     repo.upsert_sub_state(st)
     assert repo.get_sub_state("foo") == st
 

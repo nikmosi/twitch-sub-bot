@@ -20,7 +20,6 @@ from twitch_subs.domain.events import (
     UserError,
     UserRemoved,
 )
-from twitch_subs.domain.models import LoginStatus
 
 
 def register_notification_handlers(
@@ -49,12 +48,7 @@ def register_notification_handlers(
         )
 
     async def notify_about_subs_change(event: UserBecomeSubscribtable) -> None:
-        await notifier.notify_about_change(
-            LoginStatus(
-                login=event.login, broadcaster_type=event.current_state, user=None
-            ),
-            event.current_state,
-        )
+        await notifier.notify_about_change(event.login, event.current_state)
 
     async def log_once_check(event: OnceChecked) -> None:
         logger.debug(  # type: ignore[call-arg]

@@ -11,8 +11,7 @@ from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserError
 from twitch_subs.domain.models import (
     BroadcasterType,
-    LoginReportInfo,
-    LoginStatus,
+    SubState,
     UserRecord,
 )
 from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
@@ -110,8 +109,8 @@ async def test_notifier_notify_report_sorts_and_formats() -> None:
     bot = StubBot()
     notifier = TelegramNotifier(bot, "chat")
     states = [
-        LoginReportInfo(login="foo", broadcaster=BroadcasterType.PARTNER),
-        LoginReportInfo(login="bar", broadcaster=BroadcasterType.NONE),
+        SubState(login="foo", broadcaster_type=BroadcasterType.PARTNER),
+        SubState(login="bar", broadcaster_type=BroadcasterType.NONE),
     ]
 
     await notifier.notify_report(states, checks=5, errors=1)
@@ -137,9 +136,12 @@ async def test_notifier_notify_about_change_uses_display_name() -> None:
         display_name="FooBar",
         broadcaster_type=BroadcasterType.AFFILIATE,
     )
-    status = LoginStatus(login="foo", broadcaster_type=BroadcasterType.NONE, user=user)
 
-    await notifier.notify_about_change(status, BroadcasterType.PARTNER)
+    await notifier.notify_about_change(
+        user.login,
+        BroadcasterType.PARTNER,
+        display_name=user.display_name,
+    )
 
     if notifier._flush_task:
         await notifier._flush_task

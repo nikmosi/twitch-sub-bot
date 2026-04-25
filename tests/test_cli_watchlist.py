@@ -231,8 +231,10 @@ async def test_register_notification_handlers_sends_messages() -> None:
         async def send_message(self, text: str, **_: Any) -> None:
             messages.append(text)
 
-        async def notify_about_change(self, status: Any, curr: Any) -> None:
-            notified.append(f"{status.login}:{curr.value}")
+        async def notify_about_change(
+            self, login: str, curr: Any, display_name: str | None = None
+        ) -> None:
+            notified.append(f"{login}:{curr.value}")
 
         async def notify_report(self, *args: Any, **kwargs: Any) -> None:
             return None
@@ -245,7 +247,7 @@ async def test_register_notification_handlers_sends_messages() -> None:
 
     class FakeRepo:
         def get_sub_state(self, login: str) -> Any:
-            return SimpleNamespace(status=BroadcasterType.NONE)
+            return SimpleNamespace(broadcaster_type=BroadcasterType.NONE)
 
     bus = StubEventBus()
     notifier = FakeNotifier()
