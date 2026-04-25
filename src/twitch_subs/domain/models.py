@@ -42,8 +42,8 @@ class LoginStatus(ConfiguredBaseModel):
 
 class SubState(ConfiguredBaseModel):
     login: str
-    status: BroadcasterType
-    since: datetime | None = None
+    status: BroadcasterType = BroadcasterType.NONE
+    since: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     tier: str | None = None
 

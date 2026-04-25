@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Sequence
-from datetime import datetime, timezone
 
 import httpx
 from loguru import logger
@@ -15,7 +14,8 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserBecomeSubscribtable,
 )
-from twitch_subs.domain.models import LoginStatus, SubState
+from twitch_subs.domain.mapper import user_record_to_login_status
+from twitch_subs.domain.models import BroadcasterType, LoginStatus, SubState
 
 from .ports import (
     EventBus,
@@ -43,23 +43,29 @@ class Watcher:
     async def check_logins(self, logins: str | Sequence[str]) -> Sequence[LoginStatus]:
         if isinstance(logins, str):
             logins = [logins]
-        statuses: list[LoginStatus] = []
         users = await self.twitch.get_user_by_login(logins)
+
         if not users:
             logger.warning("got empty users list")
             return []
-        for user in users:
-            statuses.append(
-                LoginStatus(
-                    login=user.login,
-                    broadcaster_type=user.broadcaster_type,
-                    user=user,
-                )
-            )
-        return statuses
 
-    async def run_once(self, logins: Sequence[str]) -> bool:
-        changed = False
+        return [user_record_to_login_status(user) for user in users]
+
+    def _get_sub_state_or_default(self, login: str) -> SubState:
+        prev = self.state_repo.get_sub_state(login)
+        if not prev:
+            prev = SubState(login=login)
+        return prev
+
+    def _is_user_become_subscribtable(
+        self, prev: SubState, curr: BroadcasterType
+    ) -> bool:
+        prev_sub = prev.is_subscribed
+        curr_sub = curr.is_subscribable()
+
+        return curr_sub and prev_sub != curr_sub
+
+    async def run_once(self, logins: Sequence[str]) -> None:
         updates: list[SubState] = []
 
         try:
@@ -69,35 +75,29 @@ class Watcher:
         else:
             for status in statuses:
                 curr = status.broadcaster_type
-                prev = self.state_repo.get_sub_state(status.login)
-                prev_sub = prev.is_subscribed if prev else False
-                curr_sub = curr.is_subscribable()
-                if prev_sub != curr_sub:
-                    changed = True
-                    if curr_sub:
-                        await self.event_bus.publish(
-                            UserBecomeSubscribtable(
-                                login=status.login,
-                                current_state=curr,
-                            )
+                prev = self._get_sub_state_or_default(status.login)
+
+                if self._is_user_become_subscribtable(prev, curr):
+                    await self.event_bus.publish(
+                        UserBecomeSubscribtable(
+                            login=status.login,
+                            current_state=curr,
                         )
-                since = (
-                    prev.since
-                    if prev and prev_sub and curr_sub
-                    else (datetime.now(timezone.utc) if curr_sub else None)
-                )
-                updates.append(SubState(login=status.login, status=curr, since=since))
+                    )
+
+                sub_state = SubState(login=status.login, status=curr, since=prev.since)
+                updates.append(sub_state)
+
                 await self.event_bus.publish(
                     OnceChecked(login=status.login, current_state=curr)
                 )
 
         self.state_repo.set_many(updates)
         await self.event_bus.publish(LoopChecked(logins=logins))
-        return changed
 
     async def watch(
         self,
-        logins: LoginsProvider,
+        logins_provider: LoginsProvider,
         interval: int,
         stop_event: asyncio.Event,
     ) -> None:
@@ -106,7 +106,7 @@ class Watcher:
         await self.notifier.notify_about_start()
         try:
             while not stop_event.is_set():
-                all_logins = logins.get()
+                all_logins = logins_provider.get()
                 try:
                     await self.run_once(all_logins)
                 except Exception as e:
