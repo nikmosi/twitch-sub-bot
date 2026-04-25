@@ -64,38 +64,42 @@ class Watcher:
 
         return curr_sub and prev_sub != curr_sub
 
-    async def run_once(self, logins: Sequence[str]) -> None:
+    async def _proceed_users(self, users: Sequence[UserRecord]) -> Sequence[SubState]:
         updates: list[SubState] = []
 
+        for user in users:
+            curr = user.broadcaster_type
+            prev = self._get_sub_state_or_default(user)
+
+            if self._is_user_become_subscribtable(prev, curr):
+                await self.event_bus.publish(
+                    UserBecomeSubscribtable(
+                        login=user.login,
+                        current_state=curr,
+                    )
+                )
+
+            await self.event_bus.publish(
+                OnceChecked(login=user.login, current_state=curr)
+            )
+
+            sub_state = SubState(
+                login=user.login,
+                broadcaster_type=curr,
+                since=prev.since,
+            )
+            updates.append(sub_state)
+        return updates
+
+    async def run_once(self, logins: Sequence[str]) -> None:
         try:
             users = await self.check_logins(logins)
         except httpx.TimeoutException as e:
             await self.event_bus.publish(LoopCheckFailed(logins=logins, error=str(e)))
         else:
-            for user in users:
-                curr = user.broadcaster_type
-                prev = self._get_sub_state_or_default(user)
+            updates = await self._proceed_users(users)
+            self.state_repo.set_many(list(updates))
 
-                if self._is_user_become_subscribtable(prev, curr):
-                    await self.event_bus.publish(
-                        UserBecomeSubscribtable(
-                            login=user.login,
-                            current_state=curr,
-                        )
-                    )
-
-                sub_state = SubState(
-                    login=user.login,
-                    broadcaster_type=curr,
-                    since=prev.since,
-                )
-                updates.append(sub_state)
-
-                await self.event_bus.publish(
-                    OnceChecked(login=user.login, current_state=curr)
-                )
-
-        self.state_repo.set_many(updates)
         await self.event_bus.publish(LoopChecked(logins=logins))
 
     async def watch(

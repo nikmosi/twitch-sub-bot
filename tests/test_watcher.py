@@ -6,7 +6,6 @@ import pytest
 from twitch_subs.application.error import WatcherRunError
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.ports import (
-    EventBus,
     NotifierProtocol,
     SubscriptionStateRepo,
     TwitchClientProtocol,
@@ -19,6 +18,7 @@ from twitch_subs.domain.events import (
     UserBecomeSubscribtable,
 )
 from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
+from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
 
 
 class FakeTwitch(TwitchClientProtocol):
@@ -53,18 +53,6 @@ class FakeRepo(SubscriptionStateRepo):
         self.set_many_calls.append(collected)
         for state in collected:
             self._states[state.login] = state
-
-
-class FakeEventBus(EventBus):
-    def __init__(self) -> None:
-        self.events: list[object] = []
-        self.subscriptions: list[tuple[type[object], object]] = []
-
-    async def publish(self, *events: object) -> None:
-        self.events.extend(events)
-
-    def subscribe(self, event_type, handler) -> None:  # pragma: no cover - unused
-        self.subscriptions.append((event_type, handler))
 
 
 class FakeNotifier(NotifierProtocol):
@@ -105,6 +93,39 @@ class StaticLogins(LoginsProvider):
         return list(self._logins)
 
 
+async def _record_events(
+    bus: InMemoryEventBus,
+) -> tuple[
+    list[UserBecomeSubscribtable],
+    list[OnceChecked],
+    list[LoopChecked],
+    list[LoopCheckFailed],
+]:
+    sub_events: list[UserBecomeSubscribtable] = []
+    checked_events: list[OnceChecked] = []
+    loop_checked_events: list[LoopChecked] = []
+    failed_events: list[LoopCheckFailed] = []
+
+    async def on_subscribed(event: UserBecomeSubscribtable) -> None:
+        sub_events.append(event)
+
+    async def on_checked(event: OnceChecked) -> None:
+        checked_events.append(event)
+
+    async def on_loop_checked(event: LoopChecked) -> None:
+        loop_checked_events.append(event)
+
+    async def on_failed(event: LoopCheckFailed) -> None:
+        failed_events.append(event)
+
+    bus.subscribe(UserBecomeSubscribtable, on_subscribed)
+    bus.subscribe(OnceChecked, on_checked)
+    bus.subscribe(LoopChecked, on_loop_checked)
+    bus.subscribe(LoopCheckFailed, on_failed)
+
+    return sub_events, checked_events, loop_checked_events, failed_events
+
+
 @pytest.mark.asyncio
 async def test_run_once_detects_subscription_change() -> None:
     user = UserRecord(
@@ -115,14 +136,18 @@ async def test_run_once_detects_subscription_change() -> None:
     )
     twitch = FakeTwitch({"foo": user})
     repo = FakeRepo([SubState(login="foo", broadcaster_type=BroadcasterType.NONE)])
-    bus = FakeEventBus()
+    bus = InMemoryEventBus()
+    sub_events, checked_events, loop_checked_events, _ = await _record_events(bus)
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
     await watcher.run_once(["foo"])
 
-    assert isinstance(bus.events[0], UserBecomeSubscribtable)
-    assert isinstance(bus.events[1], OnceChecked)
-    assert isinstance(bus.events[-1], LoopChecked)
+    assert len(sub_events) == 1
+    assert sub_events[0].login == "foo"
+    assert len(checked_events) == 1
+    assert checked_events[0].login == "foo"
+    assert len(loop_checked_events) == 1
+    assert tuple(loop_checked_events[0].logins) == ("foo",)
     assert repo._states["foo"].broadcaster_type is BroadcasterType.AFFILIATE
     assert repo.set_many_calls
 
@@ -131,29 +156,44 @@ async def test_run_once_detects_subscription_change() -> None:
 async def test_run_once_skips_missing_users() -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
-    bus = FakeEventBus()
+    bus = InMemoryEventBus()
+    (
+        sub_events,
+        checked_events,
+        loop_checked_events,
+        failed_events,
+    ) = await _record_events(bus)
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
     await watcher.run_once(["foo"])
 
     assert repo.set_many_calls == [[]]
-    assert len(bus.events) == 1
-    assert isinstance(bus.events[0], LoopChecked)
+    assert sub_events == []
+    assert checked_events == []
+    assert failed_events == []
+    assert len(loop_checked_events) == 1
 
 
 @pytest.mark.asyncio
 async def test_run_once_ignores_missing_user_for_existing_state() -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo([SubState(login="foo", broadcaster_type=BroadcasterType.AFFILIATE)])
-    bus = FakeEventBus()
+    bus = InMemoryEventBus()
+    (
+        sub_events,
+        checked_events,
+        loop_checked_events,
+        failed_events,
+    ) = await _record_events(bus)
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
     await watcher.run_once(["foo"])
 
-    assert not any(isinstance(event, UserBecomeSubscribtable) for event in bus.events)
+    assert sub_events == []
+    assert checked_events == []
+    assert failed_events == []
     assert repo._states["foo"].is_subscribed is True
-    assert len(bus.events) == 1
-    assert isinstance(bus.events[0], LoopChecked)
+    assert len(loop_checked_events) == 1
 
 
 @pytest.mark.asyncio
@@ -162,7 +202,8 @@ async def test_watch_publishes_failures_and_stops(
 ) -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
-    bus = FakeEventBus()
+    bus = InMemoryEventBus()
+    _, _, _, failed_events = await _record_events(bus)
     notifier = FakeNotifier()
     watcher = Watcher(twitch, notifier, repo, bus)
 
@@ -186,17 +227,14 @@ async def test_watch_publishes_failures_and_stops(
         await asyncio.gather(task, stopper)
 
     assert notifier.started == 1 and notifier.stopped == 1
-    failure_events = [
-        event for event in bus.events if isinstance(event, LoopCheckFailed)
-    ]
-    assert failure_events and failure_events[0].error == "boom"
+    assert failed_events and failed_events[0].error == "boom"
 
 
 @pytest.mark.asyncio
 async def test_watch_handles_timeout() -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
-    bus = FakeEventBus()
+    bus = InMemoryEventBus()
     notifier = FakeNotifier()
     watcher = Watcher(twitch, notifier, repo, bus)
 
