@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
+from pathlib import Path
 from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator
 
 import aio_pika
@@ -13,6 +14,7 @@ from aiogram.enums import ParseMode
 from aiolimiter import AsyncLimiter
 from dependency_injector import containers, providers
 from sqlalchemy import Engine, create_engine, text
+from sqlalchemy.engine import make_url
 
 from twitch_subs.application.ports import (
     EventBus,
@@ -40,8 +42,21 @@ from .config import Settings
 # ---------- low-level resources ----------
 
 
+def _ensure_sqlite_directory(database_url: str) -> None:
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite":
+        return
+
+    database = url.database
+    if not database or database == ":memory:" or database.startswith("file:"):
+        return
+
+    Path(database).expanduser().parent.mkdir(parents=True, exist_ok=True)
+
+
 @contextmanager
 def _engine_resource(database_url: str, echo: bool) -> Iterator[Engine]:
+    _ensure_sqlite_directory(database_url)
     engine = create_engine(database_url, echo=echo, future=True)
     with engine.begin() as conn:
         conn.execute(text("PRAGMA journal_mode=WAL"))

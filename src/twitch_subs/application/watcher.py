@@ -109,7 +109,7 @@ class Watcher:
             while not stop_event.is_set():
                 all_logins = logins.get()
                 try:
-                    await self.run_once(all_logins, stop_event)
+                    await self.run_once(all_logins)
                 except Exception as e:
                     logger.opt(exception=e).exception("Run once failed", e)
                     await self.event_bus.publish(

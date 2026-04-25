@@ -177,3 +177,4 @@ pyrightconfig.json
 .subs_status.json
 .watchlist.json
 .pre-commit-config.yaml
+.codex

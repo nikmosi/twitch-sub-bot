@@ -10,10 +10,10 @@ services:
         APP_GID: ${APP_GID:-10123}
     env_file: .env
     user: "${APP_UID:-10123}:${APP_GID:-10123}"
-    command: [ "watch" ]
+    command: ["watch"]
     restart: unless-stopped
     volumes:
-      - ./var/:/app/var:rw
+      - bot-data:/app/var:rw
       - ./src/:/app/src:rw
     depends_on:
       - rabbitmq
@@ -30,10 +30,10 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.50'
+          cpus: "0.50"
           memory: 256M
         reservations:
-          cpus: '0.10'
+          cpus: "0.10"
           memory: 128M
 
   rabbitmq:
@@ -53,8 +53,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.50'
+          cpus: "0.50"
           memory: 512M
         reservations:
-          cpus: '0.25'
+          cpus: "0.25"
           memory: 256M
+
+volumes:
+  bot-data:

@@ -3,13 +3,18 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import inspect
+from pathlib import Path
 
 import pytest
 from aiogram.client.session.aiohttp import AiohttpSession
 from dependency_injector import providers
 
 from twitch_subs.config import Settings
-from twitch_subs.container import AppContainer, shutdown_container
+from twitch_subs.container import (
+    AppContainer,
+    _ensure_sqlite_directory,
+    shutdown_container,
+)
 from twitch_subs.application.watcher import Watcher
 
 
@@ -178,3 +183,11 @@ async def test_build_container_initializes_resources(
     assert session.closed
     assert twitch.closed
     assert connections and connections[0].closed
+
+
+def test_ensure_sqlite_directory_creates_parent(tmp_path: Path) -> None:
+    db_path = tmp_path / "nested" / "data.db"
+
+    _ensure_sqlite_directory(f"sqlite:///{db_path}")
+
+    assert db_path.parent.is_dir()

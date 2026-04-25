@@ -46,6 +46,9 @@ DB_ECHO               # set to 1 for SQL echo
 docker compose up --build
 ```
 
+SQLite data for Docker Compose is stored in the named volume `bot-data`, so the
+container does not depend on host-directory ownership for `/app/var`.
+
 ### Run locally with uv
 Manage the watchlist:
 
@@ -83,4 +86,3 @@ An XML coverage report is produced at `coverage.xml` for CI integrations.
 ## License
 Released under the terms of the GNU General Public License v3.0. See
 [LICENSE](LICENSE) for details.
-
