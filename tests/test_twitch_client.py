@@ -77,9 +77,10 @@ async def test_get_user_by_login_ok(
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        user = await tc.get_user_by_login("foo")
-        assert user and user.login == "foo"
-        assert user.broadcaster_type == BroadcasterType.PARTNER
+        users = await tc.get_user_by_login("foo")
+        assert len(users) == 1
+        assert users[0].login == "foo"
+        assert users[0].broadcaster_type == BroadcasterType.PARTNER
     finally:
         await tc.aclose()
 
@@ -251,7 +252,7 @@ async def test_get_user_none(monkeypatch: pytest.MonkeyPatch, token_ok: None) ->
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        assert await tc.get_user_by_login("foo") is None
+        assert await tc.get_user_by_login("foo") == []
     finally:
         await tc.aclose()
 

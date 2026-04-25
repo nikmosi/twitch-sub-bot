@@ -24,11 +24,17 @@ from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 class FakeTwitch(TwitchClientProtocol):
     def __init__(self, responses: dict[str, UserRecord | None]) -> None:
         self._responses = responses
-        self.calls: list[str] = []
+        self.calls: list[str | tuple[str, ...]] = []
 
-    async def get_user_by_login(self, login: str) -> UserRecord | None:
-        self.calls.append(login)
-        return self._responses[login]
+    async def get_user_by_login(self, login: str | Sequence[str]) -> list[UserRecord]:
+        if isinstance(login, str):
+            self.calls.append(login)
+            user = self._responses[login]
+            return [user] if user is not None else []
+        self.calls.append(tuple(login))
+        return [
+            self._responses[item] for item in login if self._responses[item] is not None
+        ]
 
 
 class FakeRepo(SubscriptionStateRepo):
@@ -112,7 +118,7 @@ async def test_run_once_detects_subscription_change() -> None:
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    changed = await watcher.run_once(["foo"], asyncio.Event())
+    changed = await watcher.run_once(["foo"])
 
     assert changed is True
     assert isinstance(bus.events[0], UserBecomeSubscribtable)
@@ -123,33 +129,34 @@ async def test_run_once_detects_subscription_change() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_once_stops_when_event_is_set() -> None:
+async def test_run_once_skips_missing_users() -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo()
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    stop_event = asyncio.Event()
-    stop_event.set()
-    changed = await watcher.run_once(["foo"], stop_event)
+    changed = await watcher.run_once(["foo"])
 
     assert changed is False
-    assert repo.set_many_calls == []
-    assert bus.events == []
+    assert repo.set_many_calls == [[]]
+    assert len(bus.events) == 1
+    assert isinstance(bus.events[0], LoopChecked)
 
 
 @pytest.mark.asyncio
-async def test_run_once_handles_subscription_drop() -> None:
+async def test_run_once_ignores_missing_user_for_existing_state() -> None:
     twitch = FakeTwitch({"foo": None})
     repo = FakeRepo([SubState(login="foo", status=BroadcasterType.AFFILIATE)])
     bus = FakeEventBus()
     watcher = Watcher(twitch, FakeNotifier(), repo, bus)
 
-    changed = await watcher.run_once(["foo"], asyncio.Event())
+    changed = await watcher.run_once(["foo"])
 
-    assert changed is True
+    assert changed is False
     assert not any(isinstance(event, UserBecomeSubscribtable) for event in bus.events)
-    assert repo._states["foo"].is_subscribed is False
+    assert repo._states["foo"].is_subscribed is True
+    assert len(bus.events) == 1
+    assert isinstance(bus.events[0], LoopChecked)
 
 
 @pytest.mark.asyncio
@@ -162,9 +169,7 @@ async def test_watch_publishes_failures_and_stops(
     notifier = FakeNotifier()
     watcher = Watcher(twitch, notifier, repo, bus)
 
-    async def failing_run_once(
-        logins: Sequence[str], stop_event: asyncio.Event
-    ) -> bool:
+    async def failing_run_once(logins: Sequence[str]) -> bool:
         raise RuntimeError("boom")
 
     watcher.run_once = failing_run_once  # type: ignore[assignment]
@@ -201,8 +206,8 @@ async def test_watch_handles_timeout() -> None:
     stop_event = asyncio.Event()
     provider = StaticLogins(["foo"])
 
-    async def controlled_run_once(logins: Sequence[str], event: asyncio.Event) -> bool:
-        asyncio.get_running_loop().call_later(0.02, event.set)
+    async def controlled_run_once(logins: Sequence[str]) -> bool:
+        asyncio.get_running_loop().call_later(0.02, stop_event.set)
         return False
 
     watcher.run_once = controlled_run_once  # type: ignore[assignment]

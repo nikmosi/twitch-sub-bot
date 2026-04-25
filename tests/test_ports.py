@@ -13,12 +13,12 @@ from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 
 def test_twitch_client_protocol_subclass() -> None:
     class Impl(TwitchClientProtocol):
-        def get_user_by_login(self, login: str) -> UserRecord | None:  # noqa: D401
+        def get_user_by_login(self, login: str) -> list[UserRecord]:  # noqa: D401
             _ = login
-            return None
+            return []
 
     impl = Impl()
-    assert impl.get_user_by_login("foo") is None
+    assert impl.get_user_by_login("foo") == []
 
 
 def test_notifier_protocol_subclass() -> None:
