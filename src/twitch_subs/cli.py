@@ -44,7 +44,7 @@ state_app = typer.Typer(help="Inspect subscription state")
 app.add_typer(state_app, name="state")
 
 logger.remove()
-logger.add(sys.stderr, level="TRACE")
+logger.add(sys.stderr, level="INFO")
 
 USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,25}$", re.ASCII)
 

@@ -14,7 +14,7 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserBecomeSubscribtable,
 )
-from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
+from twitch_subs.domain.models import SubState, UserRecord
 
 from .ports import (
     EventBus,
@@ -56,40 +56,42 @@ class Watcher:
             prev = SubState(login=ur.login, broadcaster_type=ur.broadcaster_type)
         return prev
 
-    def _is_user_become_subscribtable(
-        self, prev: SubState, curr: BroadcasterType
-    ) -> bool:
+    def _is_user_become_subscribtable(self, user: UserRecord) -> bool:
+        curr = user.broadcaster_type
+        prev = self._get_sub_state_or_default(user)
+
         prev_sub = prev.is_subscribed
         curr_sub = curr.is_subscribable()
 
         return curr_sub and prev_sub != curr_sub
 
+    def _to_sub_state(self, user: UserRecord) -> SubState:
+        curr = user.broadcaster_type
+        prev = self._get_sub_state_or_default(user)
+
+        return SubState(
+            login=user.login,
+            broadcaster_type=curr,
+            since=prev.since,
+        )
+
     async def _proceed_users(self, users: Sequence[UserRecord]) -> Sequence[SubState]:
-        updates: list[SubState] = []
+        current_states: list[SubState] = []
 
         for user in users:
-            curr = user.broadcaster_type
-            prev = self._get_sub_state_or_default(user)
-
-            if self._is_user_become_subscribtable(prev, curr):
+            if self._is_user_become_subscribtable(user):
                 await self.event_bus.publish(
                     UserBecomeSubscribtable(
-                        login=user.login,
-                        current_state=curr,
+                        login=user.login, current_state=user.broadcaster_type
                     )
                 )
 
             await self.event_bus.publish(
-                OnceChecked(login=user.login, current_state=curr)
+                OnceChecked(login=user.login, current_state=user.broadcaster_type)
             )
 
-            sub_state = SubState(
-                login=user.login,
-                broadcaster_type=curr,
-                since=prev.since,
-            )
-            updates.append(sub_state)
-        return updates
+            current_states.append(self._to_sub_state(user))
+        return current_states
 
     async def run_once(self, logins: Sequence[str]) -> None:
         try:
@@ -97,8 +99,8 @@ class Watcher:
         except httpx.TimeoutException as e:
             await self.event_bus.publish(LoopCheckFailed(logins=logins, error=str(e)))
         else:
-            updates = await self._proceed_users(users)
-            self.state_repo.set_many(list(updates))
+            states = await self._proceed_users(users)
+            self.state_repo.set_many(list(states))
 
         await self.event_bus.publish(LoopChecked(logins=logins))
 
