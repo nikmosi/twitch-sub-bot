@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import re
 import signal
 import sys
 from contextlib import contextmanager
@@ -24,6 +23,7 @@ from twitch_subs.application.reporting import DayChangeScheduler
 from twitch_subs.application.watcher import Watcher
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import UserAdded, UserRemoved
+from twitch_subs.domain.models import TwitchUsername
 from twitch_subs.infrastructure.error import InfraError
 from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
@@ -46,8 +46,6 @@ app.add_typer(state_app, name="state")
 logger.remove()
 logger.add(sys.stderr, level="INFO")
 
-USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,25}$", re.ASCII)
-
 
 async def entry_point(func: Awaitable[int]) -> int:
     settings = Settings()
@@ -59,15 +57,15 @@ async def entry_point(func: Awaitable[int]) -> int:
 
 def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     """Validate *value* as a Twitch username or exit with code 2."""
-    for value in names:
-        if not USERNAME_RE.fullmatch(value):
-            typer.echo(
-                "🚫 Error: Invalid Twitch username format. Usernames must be 3-25 alphanumeric "
-                "characters (including underscores).",
-                err=True,
-            )
-            raise typer.Exit(2)
-    return names
+    try:
+        return [username.value for username in TwitchUsername.parse_many(names)]
+    except ValueError:
+        typer.echo(
+            "🚫 Error: Invalid Twitch username format. Usernames must be 3-25 alphanumeric "
+            "characters (including underscores).",
+            err=True,
+        )
+        raise typer.Exit(2) from None
 
 
 async def run_watch(

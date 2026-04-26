@@ -15,9 +15,11 @@ from twitch_subs.domain.models import (
     UserRecord,
 )
 from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
+from twitch_subs.infrastructure.error import NicknameExtractionError
 from twitch_subs.infrastructure.notifier.telegram import TelegramNotifier
 from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistRepository
 from twitch_subs.infrastructure.telegram import TelegramWatchlistBot
+from twitch_subs.infrastructure.telegram.bot import parse_twitch_usernames
 
 
 class StubSession:
@@ -102,6 +104,22 @@ def test_handle_list_with_users(tmp_path: Path) -> None:
 
     assert "foo" in result
     assert "https://www.twitch.tv/foo" in result
+
+
+def test_parse_twitch_usernames_handles_whitespace_and_urls() -> None:
+    assert parse_twitch_usernames("foo   https://twitch.tv/bar\tbaz") == [
+        "foo",
+        "bar",
+        "baz",
+    ]
+
+
+@pytest.mark.parametrize("text", ["юзер", "ab", "a" * 26])
+def test_parse_twitch_usernames_rejects_invalid_logins(text: str) -> None:
+    with pytest.raises(NicknameExtractionError) as exc:
+        parse_twitch_usernames(text)
+
+    assert "Could not extract a valid Twitch nickname" in str(exc.value)
 
 
 @pytest.mark.asyncio

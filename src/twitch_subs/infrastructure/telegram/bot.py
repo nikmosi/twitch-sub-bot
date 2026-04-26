@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from dataclasses import dataclass
 from itertools import batched
 
@@ -13,6 +12,7 @@ from loguru import logger
 from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
+from twitch_subs.domain.models import TwitchUsername
 from twitch_subs.infrastructure.error import NicknameExtractionError
 
 from .filters import ChatIdFilter
@@ -20,12 +20,12 @@ from .filters import ChatIdFilter
 
 def parse_twitch_usernames(text: str) -> list[str]:
     usernames: list[str] = []
-    pattern = r"^(?:https?://(?:www|m)?\.?twitch\.tv/)?(\w+)"
-    for token in text.split(" "):
-        match = re.search(pattern, token)
-        if not match:
+    for token in text.split():
+        try:
+            username = TwitchUsername.parse_from_token(token)
+        except ValueError:
             raise NicknameExtractionError(nickname=token)
-        usernames.append(match.group(1))
+        usernames.append(username.value)
 
     return usernames
 

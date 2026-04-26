@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import field
+import re
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 
@@ -18,6 +20,43 @@ class BroadcasterType(str, Enum):
 
     def is_subscribable(self) -> bool:
         return self in {BroadcasterType.AFFILIATE, BroadcasterType.PARTNER}
+
+
+@dataclass(frozen=True, slots=True)
+class TwitchUsername:
+    value: str
+
+    _USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,25}$", re.ASCII)
+    _URL_RE = re.compile(
+        r"^https?://(?:(?:www|m)\.)?twitch\.tv/(?P<login>[A-Za-z0-9_]{3,25})/?$",
+        re.ASCII,
+    )
+
+    def __post_init__(self) -> None:
+        if not self._USERNAME_RE.fullmatch(self.value):
+            raise ValueError(self.value)
+
+    def __str__(self) -> str:  # pragma: no cover - trivial
+        return self.value
+
+    @classmethod
+    def parse(cls, raw: str) -> TwitchUsername:
+        return cls(raw.strip())
+
+    @classmethod
+    def parse_many(cls, raw_values: Iterable[str]) -> list[TwitchUsername]:
+        return [cls.parse(raw) for raw in raw_values]
+
+    @classmethod
+    def parse_from_token(cls, token: str) -> TwitchUsername:
+        candidate = token.strip()
+        if match := cls._URL_RE.fullmatch(candidate):
+            candidate = match.group("login")
+        return cls(candidate)
+
+    @classmethod
+    def parse_from_text(cls, text: str) -> list[TwitchUsername]:
+        return [cls.parse_from_token(token) for token in text.split()]
 
 
 class TwitchAppCreds(ConfiguredBaseModel):

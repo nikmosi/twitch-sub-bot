@@ -16,6 +16,7 @@ from twitch_subs import cli
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.config import Settings
 from twitch_subs.domain.models import BroadcasterType, SubState
+from twitch_subs.infrastructure.telegram.bot import parse_twitch_usernames
 from twitch_subs.infrastructure.repository_sqlite import (
     SqliteSubscriptionStateRepository,
 )
@@ -111,6 +112,19 @@ def test_validate_usernames() -> None:
     with pytest.raises(typer.Exit) as exc:
         cli.validate_usernames(["bad-name"])
     assert exc.value.exit_code == 2
+
+
+def test_validate_usernames_rejects_unicode() -> None:
+    with pytest.raises(typer.Exit) as exc:
+        cli.validate_usernames(["валидный"])
+
+    assert exc.value.exit_code == 2
+
+
+def test_cli_and_telegram_username_validation_stay_in_sync() -> None:
+    assert cli.validate_usernames(["foo", "Bar_123"]) == parse_twitch_usernames(
+        "foo Bar_123"
+    )
 
 
 @pytest.mark.asyncio
