@@ -57,10 +57,13 @@ def register_notification_handlers(
             f"checked {event.login} with status {event.current_state.value}"
         )
 
-    async def log_loop_check(event: LoopChecked) -> None:
+    async def log_loop_check_debug(event: LoopChecked) -> None:
         logger.debug(  # type: ignore[call-arg]
             f"checked {event.found_logins=} {event.missing_logins=}"
         )
+
+    async def log_loop_check_info(_: LoopChecked) -> None:
+        logger.info("loop checked")
 
     async def log_subscribable_change(event: UserBecameSubscribable) -> None:
         logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
@@ -72,7 +75,8 @@ def register_notification_handlers(
     event_bus.subscribe(UserBecameSubscribable, log_subscribable_change)
     event_bus.subscribe(OnceChecked, log_once_check)
     event_bus.subscribe(UserError, log_user_error)
-    event_bus.subscribe(LoopChecked, log_loop_check)
+    event_bus.subscribe(LoopChecked, log_loop_check_debug)
+    event_bus.subscribe(LoopChecked, log_loop_check_info)
 
     collector = DailyReportCollector(notifier, sub_state_repo)
     event_bus.subscribe(LoopChecked, collector.handle_loop_checked)
