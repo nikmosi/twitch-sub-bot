@@ -14,7 +14,7 @@ from twitch_subs.domain.events import (
     OnceChecked,
     UserBecameSubscribable,
 )
-from twitch_subs.domain.models import SubState, UserRecord
+from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 
 from .ports import (
     EventBus,
@@ -54,7 +54,7 @@ class Watcher:
         previous_state = self.state_repo.get_sub_state(user.login)
         if not previous_state:
             previous_state = SubState(
-                login=user.login, broadcaster_type=user.broadcaster_type
+                login=user.login, broadcaster_type=BroadcasterType.NONE
             )
         return previous_state
 
