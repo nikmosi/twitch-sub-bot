@@ -316,7 +316,7 @@ async def injected_main(
 
 @app.command("watch", help="Watch logins from watchlist and notify on status changes")
 def watch(
-    interval: int = typer.Option(300, "--interval", help="Poll interval, seconds"),
+    interval: int = typer.Option(20, "--interval", help="Poll interval, seconds"),
 ) -> None:
     stop = asyncio.Event()
     raise typer.Exit(asyncio.run(entry_point(injected_main(interval, stop))))
