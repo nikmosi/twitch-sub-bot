@@ -143,6 +143,7 @@ async def test_run_bot_waits_for_stop() -> None:
             self.started = False
             self.stopped = False
             self.entered = False
+            self.finished = asyncio.Event()
 
         async def __aenter__(self) -> "Bot":
             self.entered = True
@@ -153,9 +154,11 @@ async def test_run_bot_waits_for_stop() -> None:
 
         async def run(self) -> None:
             self.started = True
+            await self.finished.wait()
 
         async def stop(self) -> None:
             self.stopped = True
+            self.finished.set()
 
     bot = Bot()
     stop = asyncio.Event()
@@ -189,24 +192,16 @@ def test_watch_bot_exception_exitcode(
             interval: int,
             stop_event: asyncio.Event,
         ) -> None:
-            stop_event.set()
+            await stop_event.wait()
 
     dummy_watcher = DummyWatcher()
-    dummy_bot = DummyBot()
 
-    async def fake_watch(
-        self: container_mod.Watcher,
-        logins: LoginsProvider | Sequence[str],
-        interval: int,
-        stop_event: asyncio.Event,
-    ) -> None:
-        stop_event.set()
+    class FailingBot:
+        async def run(self) -> None:
+            raise RuntimeError("boom")
 
-    async def boom_bot(bot: Any, stop: asyncio.Event) -> None:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(container_mod.Watcher, "watch", fake_watch, raising=False)
-    monkeypatch.setattr(cli, "run_bot", boom_bot)
+        async def stop(self) -> None:
+            return None
 
     async def fake_build_container(settings: Settings) -> container_mod.AppContainer:
         container = container_mod.AppContainer()
@@ -215,8 +210,12 @@ def test_watch_bot_exception_exitcode(
         container.notifier.override(providers.Object(dummy_notifier))
         container.sub_state_repo.override(providers.Object(dummy_state_repo))
         container.watchlist_repo.override(providers.Object(dummy_repo))
-        container.watcher.override(providers.Object(dummy_watcher))
-        container.bot_app.override(providers.Object(dummy_bot))
+        container.watcher.override(
+            providers.Object(AsyncValueContextManager(dummy_watcher))
+        )
+        container.bot_app.override(
+            providers.Object(AsyncValueContextManager(FailingBot()))
+        )
         container.settings.override(providers.Object(settings))
         return container
 

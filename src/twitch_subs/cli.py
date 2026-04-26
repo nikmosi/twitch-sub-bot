@@ -87,12 +87,23 @@ async def run_bot(
 
     async with bot_cm as bot:
         task = asyncio.create_task(bot.run(), name="telegram-bot")
+        stop_task = asyncio.create_task(stop.wait(), name="telegram-bot-stop")
         try:
-            await stop.wait()
+            done, _ = await asyncio.wait(
+                {task, stop_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if task in done:
+                task.result()
+                return
         finally:
+            if not stop_task.done():
+                stop_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await bot.stop()
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
+            await asyncio.gather(stop_task, return_exceptions=True)
 
 
 @inject
@@ -220,7 +231,14 @@ async def run_worker_group(
         finally:
             bot_stop.set()
 
-    bot_task = asyncio.create_task(run_bot(bot_cm, bot_stop), name="run_bot")
+    async def bot_wrap() -> None:
+        try:
+            await run_bot(bot_cm, bot_stop)
+        except Exception:
+            stop.set()
+            raise
+
+    bot_task = asyncio.create_task(bot_wrap(), name="run_bot")
     watch_task = asyncio.create_task(watcher_wrap(), name="run_watch")
 
     try:
