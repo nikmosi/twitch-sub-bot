@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
-from typing import AsyncContextManager, AsyncIterator, Awaitable, Iterator
+from typing import AsyncIterator, Awaitable, Iterator
 
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection
@@ -114,42 +114,32 @@ async def _rabbitmq_resource(url: str) -> AsyncIterator[AbstractRobustConnection
         await connection.close()
 
 
-@asynccontextmanager
-async def _create_watcher(
+def _create_watcher(
     twitch: TwitchClientProtocol,
     notifier: NotifierProtocol,
     state_repo: SubscriptionStateRepo,
-    event_bus_factory: AsyncContextManager[EventBus],
-) -> AsyncIterator[Watcher]:
-    try:
-        async with event_bus_factory as event_bus:
-            yield Watcher(
-                twitch=twitch,
-                notifier=notifier,
-                state_repo=state_repo,
-                event_bus=event_bus,
-            )
-    except GeneratorExit:
-        return
+    event_bus: EventBus,
+) -> Watcher:
+    return Watcher(
+        twitch=twitch,
+        notifier=notifier,
+        state_repo=state_repo,
+        event_bus=event_bus,
+    )
 
 
-@asynccontextmanager
-async def _create_telegram_watchlist_bot(
+def _create_telegram_watchlist_bot(
     bot: Bot,
     chat_id: str,
     service: WatchlistService,
-    event_bus_factory: AsyncContextManager[EventBus],
-) -> AsyncIterator[TelegramWatchlistBot]:
-    try:
-        async with event_bus_factory as event_bus:
-            yield TelegramWatchlistBot(
-                bot=bot,
-                chat_id=chat_id,
-                service=service,
-                event_bus=event_bus,
-            )
-    except GeneratorExit:
-        return
+    event_bus: EventBus,
+) -> TelegramWatchlistBot:
+    return TelegramWatchlistBot(
+        bot=bot,
+        chat_id=chat_id,
+        service=service,
+        event_bus=event_bus,
+    )
 
 
 # ---------- DI container ----------
@@ -222,7 +212,6 @@ class AppContainer(containers.DeclarativeContainer):
         twitch=twitch_client,
         notifier=notifier,
         state_repo=sub_state_repo,
-        event_bus_factory=event_bus_factory,
     )
 
     bot_app = providers.Factory(
@@ -230,7 +219,6 @@ class AppContainer(containers.DeclarativeContainer):
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,
         service=watchlist_service,
-        event_bus_factory=event_bus_factory,
     )
 
 

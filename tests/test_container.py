@@ -171,12 +171,11 @@ async def test_build_container_initializes_resources(
     assert watcher.twitch is twitch
     assert watcher.notifier is notifier1
 
-    bot_cm = container.bot_app()
-    if inspect.isawaitable(bot_cm):
-        bot_cm = await bot_cm
-    async with bot_cm as bot_app:
-        assert bot_app.bot is bot
-        assert bot_app.service.repo is repo1
+    bot_app = container.bot_app(event_bus=FakeEventBus())
+    if inspect.isawaitable(bot_app):
+        bot_app = await bot_app
+    assert bot_app.bot is bot
+    assert bot_app.service.repo is repo1
 
     await shutdown_container(container)
 

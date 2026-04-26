@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
 import signal
 import sys
 from contextlib import contextmanager
@@ -9,6 +10,7 @@ from itertools import batched
 from typing import AsyncContextManager, Awaitable, Iterator, Sequence, TypeVar
 
 import typer
+from dependency_injector import providers
 from dependency_injector.wiring import Provide, inject
 from loguru import logger
 
@@ -55,6 +57,12 @@ async def entry_point(func: Awaitable[int]) -> int:
     return await func
 
 
+async def resolve(value: T | Awaitable[T]) -> T:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
 def validate_usernames(names: Sequence[str]) -> Sequence[str]:
     """Validate *value* as a Twitch username or exit with code 2."""
     try:
@@ -78,30 +86,29 @@ async def run_watch(
 
 
 async def run_bot(
-    bot_cm: AsyncContextManager[TelegramWatchlistBot],
+    bot: TelegramWatchlistBot,
     stop: asyncio.Event,
 ) -> None:
     """Run Telegram bot until *stop* is set."""
 
-    async with bot_cm as bot:
-        task = asyncio.create_task(bot.run(), name="telegram-bot")
-        stop_task = asyncio.create_task(stop.wait(), name="telegram-bot-stop")
-        try:
-            done, _ = await asyncio.wait(
-                {task, stop_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            if task in done:
-                task.result()
-                return
-        finally:
-            if not stop_task.done():
-                stop_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await bot.stop()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
-            await asyncio.gather(stop_task, return_exceptions=True)
+    task = asyncio.create_task(bot.run(), name="telegram-bot")
+    stop_task = asyncio.create_task(stop.wait(), name="telegram-bot-stop")
+    try:
+        done, _ = await asyncio.wait(
+            {task, stop_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if task in done:
+            task.result()
+            return
+    finally:
+        if not stop_task.done():
+            stop_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await bot.stop()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        await asyncio.gather(stop_task, return_exceptions=True)
 
 
 @inject
@@ -216,7 +223,7 @@ async def run_worker_group(
     settings: Settings,
     repo: WatchlistRepository,
     watcher: Watcher,
-    bot_cm: AsyncContextManager[TelegramWatchlistBot],
+    bot: TelegramWatchlistBot,
 ) -> None:
     bot_stop = asyncio.Event()
 
@@ -231,7 +238,7 @@ async def run_worker_group(
 
     async def bot_wrap() -> None:
         try:
-            await run_bot(bot_cm, bot_stop)
+            await run_bot(bot, bot_stop)
         except Exception:
             stop.set()
             raise
@@ -269,12 +276,18 @@ async def injected_main(
     ],
     notifier: NotifierProtocol = Provide[AppContainer.notifier],
     sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
-    watcher_factory: AsyncContextManager[Watcher] = Provide[AppContainer.watcher],
-    bot_cm: AsyncContextManager[TelegramWatchlistBot] = Provide[AppContainer.bot_app],
+    watcher_factory: providers.Factory[Watcher] = Provide[
+        AppContainer.watcher.provider
+    ],
+    bot_factory: providers.Factory[TelegramWatchlistBot] = Provide[
+        AppContainer.bot_app.provider
+    ],
 ) -> int:
     logins = repo.get_list()
 
-    async with event_bus_factory as event_bus, watcher_factory as watcher:
+    async with event_bus_factory as event_bus:
+        watcher = await resolve(watcher_factory(event_bus=event_bus))
+        bot = await resolve(bot_factory(event_bus=event_bus))
         scheduler = DayChangeScheduler(event_bus=event_bus, cron=settings.report_cron)
         register_notification_handlers(event_bus, notifier, sub_state_repo)
 
@@ -290,7 +303,7 @@ async def injected_main(
                     settings=settings,
                     repo=repo,
                     watcher=watcher,
-                    bot_cm=bot_cm,
+                    bot=bot,
                 )
         except TimeoutError as exc:
             log_and_wrap(exc, InfraError, context={"reason": "task_timeout"})

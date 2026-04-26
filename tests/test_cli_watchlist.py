@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -63,6 +63,16 @@ class StubEventBus:
         self.subscriptions.append((event_type, handler))
 
 
+class StubWatcher:
+    def __init__(self, event_bus: StubEventBus) -> None:
+        self.event_bus = event_bus
+
+
+class StubTelegramWatchlistBot:
+    def __init__(self, event_bus: StubEventBus) -> None:
+        self.event_bus = event_bus
+
+
 @pytest.fixture(autouse=True)
 def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
     """Avoid connecting to external services during CLI runs."""
@@ -104,13 +114,17 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         container.telegram_bot.override(
             providers.Resource(_yield, DummyAiogramBot("token"))
         )
-        container.bot_app.override(providers.Resource(_yield, object()))
         container.producer.override(providers.Resource(_yield, DummyProducer()))
         container.watchlist_repo.override(providers.Object(repo))
         container.watchlist_service.override(
             providers.Factory(WatchlistService, repo=repo)
         )
-        container.watcher.override(providers.Resource(_yield, "watcher"))
+        container.watcher.override(
+            providers.Factory(lambda event_bus: StubWatcher(event_bus))
+        )
+        container.bot_app.override(
+            providers.Factory(lambda event_bus: StubTelegramWatchlistBot(event_bus))
+        )
         container.settings.override(providers.Object(settings))
 
         await container.init_resources()
@@ -280,3 +294,159 @@ async def test_register_notification_handlers_sends_messages() -> None:
         "➖ <code>foo</code> удалён из списка наблюдения",
         "➕ <code>bar</code> добавлен в список наблюдения",
     }
+    assert notified == ["foo:affiliate"]
+
+
+@pytest.mark.asyncio
+async def test_injected_main_shares_single_event_bus_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stop = cli.asyncio.Event()
+    stop.set()
+    stub_bus = StubEventBus()
+    captured: dict[str, Any] = {}
+
+    @asynccontextmanager
+    async def fake_event_bus_factory():
+        await stub_bus.start()
+        try:
+            yield stub_bus
+        finally:
+            await stub_bus.stop()
+
+    watcher_factory = providers.Factory(lambda event_bus: StubWatcher(event_bus))
+    bot_factory = providers.Factory(
+        lambda event_bus: StubTelegramWatchlistBot(event_bus)
+    )
+
+    async def fake_run_worker_group(**kwargs: Any) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "run_worker_group", fake_run_worker_group)
+    monkeypatch.setattr(cli, "stop_on_sigterm", lambda _stop: nullcontext())
+
+    class FakeRepo:
+        def get_list(self) -> list[str]:
+            return ["foo"]
+
+    class FakeNotifier:
+        async def send_message(self, text: str, **_: Any) -> None:
+            return None
+
+        async def notify_about_change(
+            self, login: str, current_state: Any, display_name: str | None = None
+        ) -> None:
+            return None
+
+        async def notify_report(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def notify_about_start(self) -> None:
+            return None
+
+        async def notify_about_stop(self) -> None:
+            return None
+
+    class FakeSubStateRepo:
+        def get_sub_state(self, login: str) -> Any:
+            return SimpleNamespace(broadcaster_type=BroadcasterType.NONE)
+
+    result = await cli.injected_main.__wrapped__(
+        interval=1,
+        stop=stop,
+        settings=Settings(
+            twitch_client_id="id",
+            twitch_client_secret="secret",
+            telegram_bot_token="token",
+            telegram_chat_id="chat",
+            DB_URL="sqlite://",
+        ),
+        repo=FakeRepo(),
+        event_bus_factory=fake_event_bus_factory(),
+        notifier=FakeNotifier(),
+        sub_state_repo=FakeSubStateRepo(),
+        watcher_factory=watcher_factory,
+        bot_factory=bot_factory,
+    )
+
+    assert result == 0
+    assert stub_bus.started == 1
+    assert stub_bus.stopped == 1
+    assert captured["watcher"].event_bus is stub_bus
+    assert captured["bot"].event_bus is stub_bus
+
+
+@pytest.mark.asyncio
+async def test_injected_main_awaits_async_factories(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stop = cli.asyncio.Event()
+    stop.set()
+    stub_bus = StubEventBus()
+    captured: dict[str, Any] = {}
+
+    @asynccontextmanager
+    async def fake_event_bus_factory():
+        yield stub_bus
+
+    async def build_watcher(event_bus: StubEventBus) -> StubWatcher:
+        return StubWatcher(event_bus)
+
+    async def build_bot(event_bus: StubEventBus) -> StubTelegramWatchlistBot:
+        return StubTelegramWatchlistBot(event_bus)
+
+    async def fake_run_worker_group(**kwargs: Any) -> None:
+        captured.update(kwargs)
+
+    monkeypatch.setattr(cli, "run_worker_group", fake_run_worker_group)
+    monkeypatch.setattr(cli, "stop_on_sigterm", lambda _stop: nullcontext())
+
+    class FakeRepo:
+        def get_list(self) -> list[str]:
+            return ["foo"]
+
+    class FakeNotifier:
+        async def send_message(self, text: str, **_: Any) -> None:
+            return None
+
+        async def notify_about_change(
+            self, login: str, current_state: Any, display_name: str | None = None
+        ) -> None:
+            return None
+
+        async def notify_report(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+        async def notify_about_start(self) -> None:
+            return None
+
+        async def notify_about_stop(self) -> None:
+            return None
+
+    class FakeSubStateRepo:
+        def get_sub_state(self, login: str) -> Any:
+            return SimpleNamespace(broadcaster_type=BroadcasterType.NONE)
+
+    result = await cli.injected_main.__wrapped__(
+        interval=1,
+        stop=stop,
+        settings=Settings(
+            twitch_client_id="id",
+            twitch_client_secret="secret",
+            telegram_bot_token="token",
+            telegram_chat_id="chat",
+            DB_URL="sqlite://",
+        ),
+        repo=FakeRepo(),
+        event_bus_factory=fake_event_bus_factory(),
+        notifier=FakeNotifier(),
+        sub_state_repo=FakeSubStateRepo(),
+        watcher_factory=providers.Factory(build_watcher),
+        bot_factory=providers.Factory(build_bot),
+    )
+
+    assert result == 0
+    assert isinstance(captured["watcher"], StubWatcher)
+    assert isinstance(captured["bot"], StubTelegramWatchlistBot)
+    assert captured["watcher"].event_bus is stub_bus
+    assert captured["bot"].event_bus is stub_bus
