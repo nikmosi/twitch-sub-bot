@@ -54,6 +54,7 @@ class ConsoleNotifier(NotifierProtocol):
         states: Sequence[SubState],
         checks: int,
         errors: int,
+        missing_logins: Sequence[str],
     ) -> None:
         lines: list[str] = []
         lines.append("📊 Twitch Subs Daily Report")
@@ -65,6 +66,10 @@ class ConsoleNotifier(NotifierProtocol):
             lines.append(
                 f"• {broadcaster.value:>8} {info.login} (https://www.twitch.tv/{info.login})"
             )
+        if missing_logins:
+            lines.append("Missing on Twitch:")
+            for login in missing_logins:
+                lines.append(f"• {login}")
         for chunk in batched(lines, n=100):
             await self.send_message("\n".join(chunk))
 

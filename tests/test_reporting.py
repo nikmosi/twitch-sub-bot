@@ -34,7 +34,7 @@ class StubRepo(SubscriptionStateRepo):
 
 class StubNotifier(NotifierProtocol):
     def __init__(self) -> None:
-        self.reports: list[tuple[list[SubState], int, int]] = []
+        self.reports: list[tuple[list[SubState], int, int, list[str]]] = []
 
     async def notify_about_change(
         self, login, current_state, display_name=None
@@ -48,9 +48,9 @@ class StubNotifier(NotifierProtocol):
         raise NotImplementedError
 
     async def notify_report(
-        self, states, checks: int, errors: int
+        self, states, checks: int, errors: int, missing_logins
     ) -> None:  # pragma: no cover - interface contract
-        self.reports.append((list(states), checks, errors))
+        self.reports.append((list(states), checks, errors, list(missing_logins)))
 
     async def send_message(
         self,
@@ -101,21 +101,81 @@ async def test_collector_sends_report_and_resets() -> None:
     notifier = StubNotifier()
     collector = DailyReportCollector(notifier, repo)
 
-    await collector.handle_loop_checked(LoopChecked(logins=("foo",)))
+    await collector.handle_loop_checked(
+        LoopChecked(found_logins=("foo",), missing_logins=())
+    )
     await collector.handle_loop_failed(LoopCheckFailed(logins=("bar",), error="boom"))
     await collector.handle_day_changed(DayChanged())
 
     assert len(notifier.reports) == 1
-    states, checks, errors = notifier.reports[0]
+    states, checks, errors, missing_logins = notifier.reports[0]
     assert [(state.login, state.broadcaster_type) for state in states] == [
         ("bar", BroadcasterType.NONE),
         ("foo", BroadcasterType.AFFILIATE),
     ]
     assert all(state.since == now for state in states)
     assert (checks, errors) == (2, 1)
+    assert missing_logins == []
     assert collector.checks == 0
     assert collector.errors == 0
     assert collector.tracked_logins == set()
+    assert collector.missing_logins == set()
+
+
+@pytest.mark.asyncio
+async def test_collector_removes_login_from_missing_once_it_is_found() -> None:
+    now = datetime.now(timezone.utc)
+    repo = StubRepo(
+        [
+            SubState(
+                login="foo",
+                broadcaster_type=BroadcasterType.AFFILIATE,
+                since=now,
+            )
+        ]
+    )
+    notifier = StubNotifier()
+    collector = DailyReportCollector(notifier, repo)
+
+    await collector.handle_loop_checked(
+        LoopChecked(found_logins=(), missing_logins=("foo",))
+    )
+    await collector.handle_loop_checked(
+        LoopChecked(found_logins=("foo",), missing_logins=())
+    )
+    await collector.handle_day_changed(DayChanged())
+
+    assert len(notifier.reports) == 1
+    _, checks, errors, missing_logins = notifier.reports[0]
+    assert (checks, errors) == (2, 0)
+    assert missing_logins == []
+
+
+@pytest.mark.asyncio
+async def test_collector_reports_missing_logins_without_crashing() -> None:
+    now = datetime.now(timezone.utc)
+    repo = StubRepo(
+        [
+            SubState(
+                login="foo",
+                broadcaster_type=BroadcasterType.AFFILIATE,
+                since=now,
+            )
+        ]
+    )
+    notifier = StubNotifier()
+    collector = DailyReportCollector(notifier, repo)
+
+    await collector.handle_loop_checked(
+        LoopChecked(found_logins=("foo",), missing_logins=("ghost",))
+    )
+    await collector.handle_day_changed(DayChanged())
+
+    assert len(notifier.reports) == 1
+    states, checks, errors, missing_logins = notifier.reports[0]
+    assert [state.login for state in states] == ["foo"]
+    assert (checks, errors) == (1, 0)
+    assert missing_logins == ["ghost"]
 
 
 @pytest.mark.asyncio

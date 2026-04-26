@@ -50,6 +50,7 @@ class TelegramNotifier(NotifierProtocol):
         states: Sequence[SubState],
         checks: int,
         errors: int,
+        missing_logins: Sequence[str],
     ) -> None:
         text = ["📊 <b>Twitch Subs Daily Report</b>"]
         text.append(f"Checks: <b>{checks}</b>")
@@ -64,6 +65,10 @@ class TelegramNotifier(NotifierProtocol):
                 text.append(
                     f' <a href="https://www.twitch.tv/{info.login}">{info.login}</a>'
                 )
+        if missing_logins:
+            text.append("Missing on Twitch:")
+            for login in missing_logins:
+                text.append(f"• <code>{login}</code>")
         for batch in batched(text, n=100):
             await self.send_message("\n".join(batch), disable_notification=True)
 

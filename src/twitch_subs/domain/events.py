@@ -37,7 +37,8 @@ class UserBecameSubscribable(DomainEvent):
 
 
 class LoopChecked(DomainEvent):
-    logins: Sequence[str]
+    found_logins: Sequence[str]
+    missing_logins: Sequence[str]
 
 
 class LoopCheckFailed(DomainEvent):

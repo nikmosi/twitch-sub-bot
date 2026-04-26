@@ -58,7 +58,9 @@ def register_notification_handlers(
         )
 
     async def log_loop_check(event: LoopChecked) -> None:
-        logger.debug(f"checked {event.logins=}")  # type: ignore[call-arg]
+        logger.debug(  # type: ignore[call-arg]
+            f"checked {event.found_logins=} {event.missing_logins=}"
+        )
 
     async def log_subscribable_change(event: UserBecameSubscribable) -> None:
         logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]

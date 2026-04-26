@@ -17,7 +17,10 @@ async def test_in_memory_event_bus_dispatches_matching_events() -> None:
         received.append(event)
 
     bus.subscribe(DayChanged, handler)
-    await bus.publish(DayChanged(), LoopChecked(logins=("foo",)))
+    await bus.publish(
+        DayChanged(),
+        LoopChecked(found_logins=("foo",), missing_logins=()),
+    )
 
     assert len(received) == 1
     assert isinstance(received[0], DayChanged)

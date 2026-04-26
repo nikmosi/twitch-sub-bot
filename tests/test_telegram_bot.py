@@ -131,7 +131,7 @@ async def test_notifier_notify_report_sorts_and_formats() -> None:
         SubState(login="bar", broadcaster_type=BroadcasterType.NONE),
     ]
 
-    await notifier.notify_report(states, checks=5, errors=1)
+    await notifier.notify_report(states, checks=5, errors=1, missing_logins=("ghost",))
 
     if notifier._flush_task:
         await notifier._flush_task
@@ -140,6 +140,8 @@ async def test_notifier_notify_report_sorts_and_formats() -> None:
     message, kwargs = bot.sent[0]
     assert "Checks: <b>5</b>" in message
     assert "Errors: <b>1</b>" in message
+    assert "Missing on Twitch:" in message
+    assert "<code>ghost</code>" in message
     assert message.index("bar") < message.index("foo")
     assert kwargs["disable_notification"] is True
 

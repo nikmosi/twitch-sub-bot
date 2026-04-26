@@ -74,7 +74,7 @@ class FakeNotifier(NotifierProtocol):
         self.stopped += 1
 
     async def notify_report(
-        self, states, checks: int, errors: int
+        self, states, checks: int, errors: int, missing_logins
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
@@ -149,7 +149,8 @@ async def test_run_once_detects_subscription_change() -> None:
     assert len(checked_events) == 1
     assert checked_events[0].login == "foo"
     assert len(loop_checked_events) == 1
-    assert tuple(loop_checked_events[0].logins) == ("foo",)
+    assert tuple(loop_checked_events[0].found_logins) == ("foo",)
+    assert tuple(loop_checked_events[0].missing_logins) == ()
     assert repo._states["foo"].broadcaster_type is BroadcasterType.AFFILIATE
     assert repo.set_many_calls
 
@@ -174,6 +175,8 @@ async def test_run_once_skips_missing_users() -> None:
     assert checked_events == []
     assert failed_events == []
     assert len(loop_checked_events) == 1
+    assert tuple(loop_checked_events[0].found_logins) == ()
+    assert tuple(loop_checked_events[0].missing_logins) == ("foo",)
 
 
 @pytest.mark.asyncio
@@ -196,6 +199,31 @@ async def test_run_once_ignores_missing_user_for_existing_state() -> None:
     assert failed_events == []
     assert repo._states["foo"].is_subscribed is True
     assert len(loop_checked_events) == 1
+    assert tuple(loop_checked_events[0].found_logins) == ()
+    assert tuple(loop_checked_events[0].missing_logins) == ("foo",)
+
+
+@pytest.mark.asyncio
+async def test_run_once_reports_found_and_missing_users() -> None:
+    user = UserRecord(
+        id="1",
+        login="foo",
+        display_name="Foo",
+        broadcaster_type=BroadcasterType.AFFILIATE,
+    )
+    twitch = FakeTwitch({"foo": user, "bar": None})
+    repo = FakeRepo()
+    bus = InMemoryEventBus()
+    _, checked_events, loop_checked_events, failed_events = await _record_events(bus)
+    watcher = Watcher(twitch, FakeNotifier(), repo, bus)
+
+    await watcher.run_once(["foo", "bar"])
+
+    assert failed_events == []
+    assert [event.login for event in checked_events] == ["foo"]
+    assert len(loop_checked_events) == 1
+    assert tuple(loop_checked_events[0].found_logins) == ("foo",)
+    assert tuple(loop_checked_events[0].missing_logins) == ("bar",)
 
 
 @pytest.mark.asyncio

@@ -264,7 +264,7 @@ async def test_register_notification_handlers_sends_messages() -> None:
                 OnceChecked(login="foo", current_state=BroadcasterType.PARTNER)
             )
         if event_type is LoopChecked:
-            await handler(LoopChecked(logins=("foo", "bar")))
+            await handler(LoopChecked(found_logins=("foo",), missing_logins=("bar",)))
         if event_type is LoopCheckFailed:
             await handler(LoopCheckFailed(logins=("foo",), error="boom"))
         if event_type is DayChanged:

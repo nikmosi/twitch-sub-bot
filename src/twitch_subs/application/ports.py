@@ -43,6 +43,7 @@ class NotifierProtocol(Protocol):
         states: Sequence[SubState],
         checks: int,
         errors: int,
+        missing_logins: Sequence[str],
     ) -> None: ...  # pragma: no cover
 
     async def send_message(

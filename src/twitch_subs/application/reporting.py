@@ -10,7 +10,6 @@ from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 import aiocron
 from loguru import logger
 
-from twitch_subs.application.error import RepositoryLoginNotFoundError
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -27,11 +26,14 @@ class DailyReportCollector:
     notifier: NotifierProtocol
     state_repo: SubscriptionStateRepo
     tracked_logins: set[str] = field(default_factory=set[str])
+    missing_logins: set[str] = field(default_factory=set[str])
     checks: int = 0
     errors: int = 0
 
     async def handle_loop_checked(self, event: LoopChecked) -> None:
-        self.tracked_logins.update(event.logins)
+        self.tracked_logins.update(event.found_logins)
+        self.missing_logins.update(event.missing_logins)
+        self.missing_logins.difference_update(event.found_logins)
         self.checks += 1
 
     async def handle_loop_failed(self, event: LoopCheckFailed) -> None:
@@ -45,19 +47,24 @@ class DailyReportCollector:
 
     async def _send_report(self) -> None:
         states = self._collect_states(self.tracked_logins)
-        await self.notifier.notify_report(states, self.checks, self.errors)
+        await self.notifier.notify_report(
+            states,
+            self.checks,
+            self.errors,
+            missing_logins=tuple(sorted(self.missing_logins)),
+        )
 
     def _collect_states(self, logins: Iterable[str]) -> list[SubState]:
         report: list[SubState] = []
         for login in sorted(logins):
             state = self.state_repo.get_sub_state(login)
-            if state is None:
-                raise RepositoryLoginNotFoundError(login=login)
-            report.append(state)
+            if state is not None:
+                report.append(state)
         return report
 
     def _reset(self) -> None:
         self.tracked_logins.clear()
+        self.missing_logins.clear()
         self.checks = 0
         self.errors = 0
 
