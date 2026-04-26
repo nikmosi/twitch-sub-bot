@@ -138,11 +138,14 @@ class Consumer:
                     LOGGER.warning("stop: timeout while cancelling consumer")
                 except asyncio.CancelledError:
                     raise
-                except Exception as e:
+                except Exception as exc:
                     log_and_wrap(
-                        e,
+                        exc,
                         ConsumerShutdownError,
-                        context={"stage": "queue_cancel", "exc_type": type(e).__name__},
+                        context={
+                            "stage": "queue_cancel",
+                            "exc_type": type(exc).__name__,
+                        },
                     )
                 finally:
                     self._consumer_tag = None
@@ -159,13 +162,13 @@ class Consumer:
                     LOGGER.warning("stop: timeout while closing channel")
                 except asyncio.CancelledError:
                     raise
-                except Exception as e:
+                except Exception as exc:
                     log_and_wrap(
-                        e,
+                        exc,
                         ConsumerShutdownError,
                         context={
                             "stage": "channel_close",
-                            "exc_type": type(e).__name__,
+                            "exc_type": type(exc).__name__,
                         },
                     )
                 finally:
@@ -211,13 +214,13 @@ class Consumer:
             if event_id and event_id in self._deduplication:
                 return
 
-            name = data.get("name")
-            tp = self._types_by_name.get(name)
-            if tp is None:
-                LOGGER.warning("skip unknown event {}", name)
+            event_name = data.get("name")
+            event_type = self._types_by_name.get(event_name)
+            if event_type is None:
+                LOGGER.warning("skip unknown event {}", event_name)
                 return
 
-            event = tp.model_validate(
+            event = event_type.model_validate(
                 {
                     **(data.get("payload") or {}),
                     "id": data["id"],
@@ -236,8 +239,8 @@ class Consumer:
 
     async def _dispatch(self, event: DomainEvent) -> None:
         handlers: list[Handler[Any]] = []
-        for tp, registered in self._handlers.items():
-            if isinstance(event, tp):
-                handlers.extend(registered)
+        for event_type, registered_handlers in self._handlers.items():
+            if isinstance(event, event_type):
+                handlers.extend(registered_handlers)
         for handler in handlers:
             await handler(cast(Any, event))

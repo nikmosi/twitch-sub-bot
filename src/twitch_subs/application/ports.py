@@ -22,8 +22,8 @@ class EventBus(Protocol):
 
 
 class TwitchClientProtocol(Protocol):
-    async def get_user_by_login(
-        self, login: str | Sequence[str]
+    async def get_users_by_login(
+        self, logins: str | Sequence[str]
     ) -> Sequence[UserRecord]: ...  # pragma: no cover
 
 
@@ -31,7 +31,7 @@ class NotifierProtocol(Protocol):
     async def notify_about_change(
         self,
         login: str,
-        curr: BroadcasterType,
+        current_state: BroadcasterType,
         display_name: str | None = None,
     ) -> None: ...  # pragma: no cover
 

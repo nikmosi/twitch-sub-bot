@@ -16,7 +16,7 @@ from twitch_subs.domain.events import (
     LoopCheckFailed,
     OnceChecked,
     UserAdded,
-    UserBecomeSubscribtable,
+    UserBecameSubscribable,
     UserError,
     UserRemoved,
 )
@@ -47,7 +47,9 @@ def register_notification_handlers(
             f"➖ <code>{event.login}</code> удалён из списка наблюдения"
         )
 
-    async def notify_about_subs_change(event: UserBecomeSubscribtable) -> None:
+    async def notify_about_subscribable_change(
+        event: UserBecameSubscribable,
+    ) -> None:
         await notifier.notify_about_change(event.login, event.current_state)
 
     async def log_once_check(event: OnceChecked) -> None:
@@ -58,14 +60,14 @@ def register_notification_handlers(
     async def log_loop_check(event: LoopChecked) -> None:
         logger.debug(f"checked {event.logins=}")  # type: ignore[call-arg]
 
-    async def log_subs_change(event: UserBecomeSubscribtable) -> None:
+    async def log_subscribable_change(event: UserBecameSubscribable) -> None:
         logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
 
     event_bus.subscribe(UserAdded, notify_about_add)
     event_bus.subscribe(UserRemoved, notify_about_remove)
-    event_bus.subscribe(UserBecomeSubscribtable, notify_about_subs_change)
+    event_bus.subscribe(UserBecameSubscribable, notify_about_subscribable_change)
     event_bus.subscribe(UserError, notify_about_error)
-    event_bus.subscribe(UserBecomeSubscribtable, log_subs_change)
+    event_bus.subscribe(UserBecameSubscribable, log_subscribable_change)
     event_bus.subscribe(OnceChecked, log_once_check)
     event_bus.subscribe(UserError, log_user_error)
     event_bus.subscribe(LoopChecked, log_loop_check)

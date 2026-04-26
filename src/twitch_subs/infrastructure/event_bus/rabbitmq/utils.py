@@ -17,13 +17,13 @@ _EVENT_VERSION = 1
 _CAMEL_SPLIT = re.compile(r"[A-Z]+(?=[A-Z][a-z]|$)|[A-Z]?[a-z]+|\d+")
 
 
-def routing_key_from_type(tp: type[DomainEvent]) -> str:
+def routing_key_from_type(event_type: type[DomainEvent]) -> str:
     # Опциональные переопределения на классе события
-    rk = getattr(tp, "ROUTING_KEY", None)
-    if isinstance(rk, str) and rk:
-        return rk
-    prefix = getattr(tp, "ROUTING_PREFIX", "domain")
-    name = tp.name()
+    routing_key = getattr(event_type, "ROUTING_KEY", None)
+    if isinstance(routing_key, str) and routing_key:
+        return routing_key
+    prefix = getattr(event_type, "ROUTING_PREFIX", "domain")
+    name = event_type.name()
     parts = _CAMEL_SPLIT.findall(name)
     return f"{prefix}." + ".".join(p.lower() for p in parts)
 

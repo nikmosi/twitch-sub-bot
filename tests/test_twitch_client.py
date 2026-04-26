@@ -57,7 +57,7 @@ def make_client(
 
 
 @pytest.mark.asyncio
-async def test_get_user_by_login_ok(
+async def test_get_users_by_login_ok(
     monkeypatch: pytest.MonkeyPatch, token_ok: None
 ) -> None:
     async def fake_get(
@@ -77,7 +77,7 @@ async def test_get_user_by_login_ok(
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        users = await tc.get_user_by_login("foo")
+        users = await tc.get_users_by_login("foo")
         assert len(users) == 1
         assert users[0].login == "foo"
         assert users[0].broadcaster_type == BroadcasterType.PARTNER
@@ -121,7 +121,7 @@ async def test_401_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        await tc.get_user_by_login("foo")
+        await tc.get_users_by_login("foo")
         assert len(token_calls) == 2
         first, second = calls
         assert first and first["Client-Id"] == "cid"
@@ -160,8 +160,8 @@ async def test_refresh_before_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        await tc.get_user_by_login("foo")
-        await tc.get_user_by_login("bar")
+        await tc.get_users_by_login("foo")
+        await tc.get_users_by_login("bar")
         assert token_calls == 2
     finally:
         await tc.aclose()
@@ -182,7 +182,7 @@ async def test_5xx_raises(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> No
     tc = make_client(monkeypatch, fake_get)
     try:
         with pytest.raises(httpx.HTTPStatusError):
-            await tc.get_user_by_login("foo")
+            await tc.get_users_by_login("foo")
     finally:
         await tc.aclose()
 
@@ -202,7 +202,7 @@ async def test_rate_limit(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> No
     tc = make_client(monkeypatch, fake_get)
     try:
         with pytest.raises(httpx.HTTPStatusError):
-            await tc.get_user_by_login("foo")
+            await tc.get_users_by_login("foo")
     finally:
         await tc.aclose()
 
@@ -222,7 +222,7 @@ async def test_timeout(monkeypatch: pytest.MonkeyPatch, token_ok: None) -> None:
     tc = make_client(monkeypatch, fake_get)
     try:
         with pytest.raises(httpx.TimeoutException):
-            await tc.get_user_by_login("foo")
+            await tc.get_users_by_login("foo")
     finally:
         await tc.aclose()
 
@@ -252,7 +252,7 @@ async def test_get_user_none(monkeypatch: pytest.MonkeyPatch, token_ok: None) ->
 
     tc = make_client(monkeypatch, fake_get)
     try:
-        assert await tc.get_user_by_login("foo") == []
+        assert await tc.get_users_by_login("foo") == []
     finally:
         await tc.aclose()
 

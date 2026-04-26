@@ -51,27 +51,31 @@ class TwitchClient(TwitchClientProtocol):
     def from_creds(cls, creds: TwitchAppCreds) -> "TwitchClient":
         return cls(creds.client_id, creds.client_secret)
 
-    async def get_user_by_login(
-        self, login: str | Sequence[str]
+    async def get_users_by_login(
+        self, logins: str | Sequence[str]
     ) -> Sequence[UserRecord]:
-        if isinstance(login, str):
-            login = [login]
+        if isinstance(logins, str):
+            logins = [logins]
 
         users: list[UserRecord] = []
-        for batch in batched(login, n=self._logins_per_request_limit):
+        for batch in batched(logins, n=self._logins_per_request_limit):
             data = await self._get("/helix/users", params={"login": batch})
-            items = data.get("data", [])
-            if not items:
+            payload_items = data.get("data", [])
+            if not payload_items:
                 continue
 
-            for u in items:
-                btype = u.get("broadcaster_type") or BroadcasterType.NONE.value
+            for user_payload in payload_items:
+                broadcaster_type = (
+                    user_payload.get("broadcaster_type") or BroadcasterType.NONE.value
+                )
                 users.append(
                     UserRecord(
-                        id=u["id"],
-                        login=u["login"],
-                        display_name=u.get("display_name", u["login"]),
-                        broadcaster_type=BroadcasterType(btype),
+                        id=user_payload["id"],
+                        login=user_payload["login"],
+                        display_name=user_payload.get(
+                            "display_name", user_payload["login"]
+                        ),
+                        broadcaster_type=BroadcasterType(broadcaster_type),
                     )
                 )
 
@@ -82,13 +86,17 @@ class TwitchClient(TwitchClientProtocol):
     ) -> dict[str, Any]:
         await self._ensure_token()
         async with self._limiter:
-            r = await self._http.get(path, params=params, headers=self._auth_headers())
-        if r.status_code == 401:
+            response = await self._http.get(
+                path, params=params, headers=self._auth_headers()
+            )
+        if response.status_code == 401:
             logger.warning("Twitch 401: refreshing token and retrying once…")
             await self._refresh_app_token()
-            r = await self._http.get(path, params=params, headers=self._auth_headers())
-        r.raise_for_status()
-        return r.json()
+            response = await self._http.get(
+                path, params=params, headers=self._auth_headers()
+            )
+        response.raise_for_status()
+        return response.json()
 
     def _auth_headers(self) -> dict[str, str]:
         assert self._token
@@ -108,7 +116,7 @@ class TwitchClient(TwitchClientProtocol):
 
     async def _refresh_app_token(self) -> None:
         logger.info("Refreshing Twitch app token…")
-        r = await self._http.post(
+        response = await self._http.post(
             TWITCH_TOKEN_URL,
             data={
                 "client_id": self.client_id,
@@ -117,7 +125,7 @@ class TwitchClient(TwitchClientProtocol):
             },
             timeout=10.0,
         )
-        r.raise_for_status()
-        data = r.json()
+        response.raise_for_status()
+        data = response.json()
         self._token = data["access_token"]
         self._token_exp = time.time() + int(data.get("expires_in", 0))

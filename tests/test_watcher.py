@@ -15,7 +15,7 @@ from twitch_subs.domain.events import (
     LoopCheckFailed,
     LoopChecked,
     OnceChecked,
-    UserBecomeSubscribtable,
+    UserBecameSubscribable,
 )
 from twitch_subs.domain.models import BroadcasterType, SubState, UserRecord
 from twitch_subs.infrastructure.event_bus.inmemory import InMemoryEventBus
@@ -26,14 +26,16 @@ class FakeTwitch(TwitchClientProtocol):
         self._responses = responses
         self.calls: list[str | tuple[str, ...]] = []
 
-    async def get_user_by_login(self, login: str | Sequence[str]) -> list[UserRecord]:
-        if isinstance(login, str):
-            self.calls.append(login)
-            user = self._responses[login]
+    async def get_users_by_login(self, logins: str | Sequence[str]) -> list[UserRecord]:
+        if isinstance(logins, str):
+            self.calls.append(logins)
+            user = self._responses[logins]
             return [user] if user is not None else []
-        self.calls.append(tuple(login))
+        self.calls.append(tuple(logins))
         return [
-            self._responses[item] for item in login if self._responses[item] is not None
+            self._responses[item]
+            for item in logins
+            if self._responses[item] is not None
         ]
 
 
@@ -61,7 +63,7 @@ class FakeNotifier(NotifierProtocol):
         self.stopped = 0
 
     async def notify_about_change(
-        self, login, curr, display_name=None
+        self, login, current_state, display_name=None
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 
@@ -96,17 +98,17 @@ class StaticLogins(LoginsProvider):
 async def _record_events(
     bus: InMemoryEventBus,
 ) -> tuple[
-    list[UserBecomeSubscribtable],
+    list[UserBecameSubscribable],
     list[OnceChecked],
     list[LoopChecked],
     list[LoopCheckFailed],
 ]:
-    sub_events: list[UserBecomeSubscribtable] = []
+    sub_events: list[UserBecameSubscribable] = []
     checked_events: list[OnceChecked] = []
     loop_checked_events: list[LoopChecked] = []
     failed_events: list[LoopCheckFailed] = []
 
-    async def on_subscribed(event: UserBecomeSubscribtable) -> None:
+    async def on_subscribed(event: UserBecameSubscribable) -> None:
         sub_events.append(event)
 
     async def on_checked(event: OnceChecked) -> None:
@@ -118,7 +120,7 @@ async def _record_events(
     async def on_failed(event: LoopCheckFailed) -> None:
         failed_events.append(event)
 
-    bus.subscribe(UserBecomeSubscribtable, on_subscribed)
+    bus.subscribe(UserBecameSubscribable, on_subscribed)
     bus.subscribe(OnceChecked, on_checked)
     bus.subscribe(LoopChecked, on_loop_checked)
     bus.subscribe(LoopCheckFailed, on_failed)

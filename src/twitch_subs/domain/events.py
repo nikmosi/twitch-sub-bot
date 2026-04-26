@@ -31,7 +31,7 @@ class DomainEvent(BaseModel):
     )
 
 
-class UserBecomeSubscribtable(DomainEvent):
+class UserBecameSubscribable(DomainEvent):
     login: str
     current_state: BroadcasterType
 

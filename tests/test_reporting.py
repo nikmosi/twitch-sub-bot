@@ -37,7 +37,7 @@ class StubNotifier(NotifierProtocol):
         self.reports: list[tuple[list[SubState], int, int]] = []
 
     async def notify_about_change(
-        self, login, curr, display_name=None
+        self, login, current_state, display_name=None
     ) -> None:  # pragma: no cover - unused
         raise NotImplementedError
 

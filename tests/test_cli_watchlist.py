@@ -21,7 +21,7 @@ from twitch_subs.domain.events import (
     LoopCheckFailed,
     OnceChecked,
     UserAdded,
-    UserBecomeSubscribtable,
+    UserBecameSubscribable,
     UserRemoved,
 )
 from twitch_subs.domain.models import BroadcasterType
@@ -232,9 +232,9 @@ async def test_register_notification_handlers_sends_messages() -> None:
             messages.append(text)
 
         async def notify_about_change(
-            self, login: str, curr: Any, display_name: str | None = None
+            self, login: str, current_state: Any, display_name: str | None = None
         ) -> None:
-            notified.append(f"{login}:{curr.value}")
+            notified.append(f"{login}:{current_state.value}")
 
         async def notify_report(self, *args: Any, **kwargs: Any) -> None:
             return None
@@ -269,9 +269,9 @@ async def test_register_notification_handlers_sends_messages() -> None:
             await handler(LoopCheckFailed(logins=("foo",), error="boom"))
         if event_type is DayChanged:
             await handler(DayChanged())
-        if event_type is UserBecomeSubscribtable:
+        if event_type is UserBecameSubscribable:
             await handler(
-                UserBecomeSubscribtable(
+                UserBecameSubscribable(
                     login="foo", current_state=BroadcasterType.AFFILIATE
                 )
             )

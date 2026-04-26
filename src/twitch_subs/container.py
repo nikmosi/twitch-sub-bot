@@ -119,10 +119,10 @@ async def _create_watcher(
     twitch: TwitchClientProtocol,
     notifier: NotifierProtocol,
     state_repo: SubscriptionStateRepo,
-    event_bus_fac: AsyncContextManager[EventBus],
+    event_bus_factory: AsyncContextManager[EventBus],
 ) -> AsyncIterator[Watcher]:
     try:
-        async with event_bus_fac as event_bus:
+        async with event_bus_factory as event_bus:
             yield Watcher(
                 twitch=twitch,
                 notifier=notifier,
@@ -138,10 +138,10 @@ async def _create_telegram_watchlist_bot(
     bot: Bot,
     chat_id: str,
     service: WatchlistService,
-    event_bus_fac: AsyncContextManager[EventBus],
+    event_bus_factory: AsyncContextManager[EventBus],
 ) -> AsyncIterator[TelegramWatchlistBot]:
     try:
-        async with event_bus_fac as event_bus:
+        async with event_bus_factory as event_bus:
             yield TelegramWatchlistBot(
                 bot=bot,
                 chat_id=chat_id,
@@ -222,7 +222,7 @@ class AppContainer(containers.DeclarativeContainer):
         twitch=twitch_client,
         notifier=notifier,
         state_repo=sub_state_repo,
-        event_bus_fac=event_bus_factory,
+        event_bus_factory=event_bus_factory,
     )
 
     bot_app = providers.Factory(
@@ -230,7 +230,7 @@ class AppContainer(containers.DeclarativeContainer):
         bot=telegram_bot,
         chat_id=container_config.telegram_chat_id,
         service=watchlist_service,
-        event_bus_fac=event_bus_factory,
+        event_bus_factory=event_bus_factory,
     )
 
 
@@ -242,14 +242,14 @@ async def build_container(settings: Settings) -> AppContainer:
     container = AppContainer()
     container.container_config.from_pydantic(settings)  # pyright: ignore
     # Инициализируем все Resource провайдеры сразу
-    aw = container.init_resources()
-    if isinstance(aw, Awaitable):
-        await aw
+    init_resources_result = container.init_resources()
+    if isinstance(init_resources_result, Awaitable):
+        await init_resources_result
     return container
 
 
 async def shutdown_container(container: AppContainer) -> None:
     """Graceful shutdown of resources."""
-    aw = container.shutdown_resources()
-    if isinstance(aw, Awaitable):
-        await aw
+    shutdown_resources_result = container.shutdown_resources()
+    if isinstance(shutdown_resources_result, Awaitable):
+        await shutdown_resources_result

@@ -27,7 +27,7 @@ from twitch_subs.domain.events import UserAdded, UserRemoved
 from twitch_subs.infrastructure.error import InfraError
 from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
-from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
+from twitch_subs.infrastructure.logins_provider import WatchlistLoginsProvider
 from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
 
 from .config import Settings
@@ -76,7 +76,7 @@ async def run_watch(
     interval: int,
     stop: asyncio.Event,
 ) -> None:
-    await watcher.watch(WatchListLoginProvider(repo), interval, stop)
+    await watcher.watch(WatchlistLoginsProvider(repo), interval, stop)
 
 
 async def run_bot(
@@ -124,14 +124,14 @@ async def _add(
 async def _list_cmd(
     repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
 ) -> int:
-    users = repo.get_list()
-    if not users:
+    watchlist_logins = repo.get_list()
+    if not watchlist_logins:
         typer.echo(
             "📭 The watchlist is currently empty. Use the 'add' command to follow some Twitch users."
         )
         raise typer.Exit(0)
-    for name in users:
-        typer.echo(name)
+    for login in watchlist_logins:
+        typer.echo(login)
     return 0
 
 

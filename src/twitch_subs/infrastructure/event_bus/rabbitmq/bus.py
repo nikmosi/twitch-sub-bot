@@ -66,9 +66,9 @@ class RabbitMQEventBus(EventBus):
                 await self._producer.stop()
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except Exception as exc:
                 log_and_wrap(
-                    e,
+                    exc,
                     EventBusShutdownError,
-                    context={"stage": "producer_stop", "exc_type": type(e).__name__},
+                    context={"stage": "producer_stop", "exc_type": type(exc).__name__},
                 )

@@ -1,7 +1,7 @@
 from collections import deque
 
 from twitch_subs.application.logins import LoginsProvider
-from twitch_subs.infrastructure.logins_provider import WatchListLoginProvider
+from twitch_subs.infrastructure.logins_provider import WatchlistLoginsProvider
 
 
 class MemoryRepo:
@@ -20,7 +20,7 @@ class DummyProvider(LoginsProvider):
 
 def test_watchlist_login_provider_uses_repo() -> None:
     repo = MemoryRepo()
-    provider = WatchListLoginProvider(repo)
+    provider = WatchlistLoginsProvider(repo)
     assert provider.get() == ["b", "a"]
     assert list(repo.calls) == ["get_list"]
 

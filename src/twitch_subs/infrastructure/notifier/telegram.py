@@ -26,14 +26,14 @@ class TelegramNotifier(NotifierProtocol):
     async def notify_about_change(
         self,
         login: str,
-        curr: BroadcasterType,
+        current_state: BroadcasterType,
         display_name: str | None = None,
     ) -> None:
         display = display_name or login
-        badge = "🟣" if curr == BroadcasterType.PARTNER else "🟡"
-        subflag = "да" if curr.is_subscribable() else "нет"
+        badge = "🟣" if current_state == BroadcasterType.PARTNER else "🟡"
+        subflag = "да" if current_state.is_subscribable() else "нет"
         text = (
-            f'{badge} <a href="https://www.twitch.tv/{login}">{display}</a> стал <b>{curr.value}</b>\n'
+            f'{badge} <a href="https://www.twitch.tv/{login}">{display}</a> стал <b>{current_state.value}</b>\n'
             f"Подписка доступна: <b>{subflag}</b>\n"
             f"Логин: <code>{login}</code>\n"
         )

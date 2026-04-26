@@ -6,12 +6,12 @@ from aiogram.types import Message
 from loguru import logger
 
 
-class IDFilter(Filter):
-    def __init__(self, id: str):
-        self._id = int(id)
+class ChatIdFilter(Filter):
+    def __init__(self, chat_id: str):
+        self._chat_id = int(chat_id)
 
-    async def __call__(self, obj: Message) -> bool:
-        res = obj.chat.id == self._id
-        if not res:
+    async def __call__(self, message: Message) -> bool:
+        is_allowed_chat = message.chat.id == self._chat_id
+        if not is_allowed_chat:
             logger.info("Got message from unregister user.")
-        return res
+        return is_allowed_chat

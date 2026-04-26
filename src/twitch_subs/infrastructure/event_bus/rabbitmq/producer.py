@@ -63,11 +63,11 @@ class Producer:
                 await self._channel.close()
             except asyncio.CancelledError:
                 raise
-            except Exception as e:
+            except Exception as exc:
                 log_and_wrap(
-                    e,
+                    exc,
                     ProducerShutdownError,
-                    context={"stage": "channel_close", "exc_type": type(e).__name__},
+                    context={"stage": "channel_close", "exc_type": type(exc).__name__},
                 )
             finally:
                 self._channel = None

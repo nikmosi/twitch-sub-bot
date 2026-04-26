@@ -4,7 +4,7 @@ from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.application.ports import WatchlistRepository
 
 
-class WatchListLoginProvider(LoginsProvider):
+class WatchlistLoginsProvider(LoginsProvider):
     def __init__(self, repo: WatchlistRepository) -> None:
         self.repo = repo
 

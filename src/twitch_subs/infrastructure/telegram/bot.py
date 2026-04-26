@@ -15,24 +15,23 @@ from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
 from twitch_subs.infrastructure.error import NicknameExtractionError
 
-from .filters import IDFilter
+from .filters import ChatIdFilter
 
 
-def to_usernames(text: str) -> list[str]:
-    res: list[str] = []
+def parse_twitch_usernames(text: str) -> list[str]:
+    usernames: list[str] = []
     pattern = r"^(?:https?://(?:www|m)?\.?twitch\.tv/)?(\w+)"
-    for i in text.split(" "):
-        match_ = re.search(pattern, i)
-        if not match_:
-            raise NicknameExtractionError(nickname=i)
-        nickname = match_.group(1)
-        res.append(nickname)
+    for token in text.split(" "):
+        match = re.search(pattern, token)
+        if not match:
+            raise NicknameExtractionError(nickname=token)
+        usernames.append(match.group(1))
 
-    return res
+    return usernames
 
 
 @dataclass(slots=True, frozen=True, kw_only=True)
-class Commands:
+class WatchlistCommands:
     service: WatchlistService
 
     # ----- pure helpers used by handlers and tests -----
@@ -58,7 +57,7 @@ class Commands:
                 )
         return events
 
-    def _create_users_list(self) -> list[str]:
+    def _format_watchlist_entries(self) -> list[str]:
         users = self.service.list()
         text: list[str] = []
         for login in users:
@@ -68,24 +67,22 @@ class Commands:
     def get_list(self) -> str:
         text = ["📊 <b>List</b>"]
         text.append("")
-        users = self._create_users_list()
+        users = self._format_watchlist_entries()
         if users:
             return "\n".join(text + users)
         return "📭 Watchlist is empty"
 
     def handle_command(self, text: str) -> list[DomainEvent] | str:
         parts = text.strip().split(maxsplit=1)
-        cmd = parts[0]
-        arg = parts[1].strip() if len(parts) > 1 else None
-        if cmd == "/add" and arg:
-            return self.add(to_usernames(arg))
-        if cmd == "/remove" and arg:
-            return self.remove(to_usernames(arg))
-        if cmd == "/list" and not arg:
+        command = parts[0]
+        argument = parts[1].strip() if len(parts) > 1 else None
+        if command == "/add" and argument:
+            return self.add(parse_twitch_usernames(argument))
+        if command == "/remove" and argument:
+            return self.remove(parse_twitch_usernames(argument))
+        if command == "/list" and not argument:
             return self.get_list()
         return "❓ Unknown command"
-
-    pass
 
 
 class TelegramWatchlistBot:
@@ -96,19 +93,19 @@ class TelegramWatchlistBot:
     ) -> None:
         self.service = service
         self.bus = event_bus
-        self.commands = Commands(service=service)
+        self.commands = WatchlistCommands(service=service)
         self.bot = bot
         self.dispatcher = Dispatcher()
 
         self.dispatcher.message.register(
-            self._cmd_add, Command("add"), IDFilter(chat_id)
+            self._cmd_add, Command("add"), ChatIdFilter(chat_id)
         )
 
         self.dispatcher.message.register(
-            self._cmd_remove, Command("remove"), IDFilter(chat_id)
+            self._cmd_remove, Command("remove"), ChatIdFilter(chat_id)
         )
         self.dispatcher.message.register(
-            self._cmd_list, Command("list"), IDFilter(chat_id)
+            self._cmd_list, Command("list"), ChatIdFilter(chat_id)
         )
 
     # ----- aiogram command handlers -----
@@ -117,9 +114,9 @@ class TelegramWatchlistBot:
         if len(parts) < 2:
             await message.answer("ℹ️ Usage: /add <username>...")
             return
-        arg = parts[1].strip()
+        usernames_text = parts[1].strip()
         try:
-            usernames = to_usernames(arg)
+            usernames = parse_twitch_usernames(usernames_text)
         except NicknameExtractionError as e:
             logger.opt(exception=e).warning(e.message)
             await self.bus.publish(UserError(login=e.nickname, exception=e.message))
@@ -132,9 +129,9 @@ class TelegramWatchlistBot:
         if len(parts) < 2:
             await message.answer("ℹ️ Usage: /remove <username>...")
             return
-        arg = parts[1].strip()
+        usernames_text = parts[1].strip()
         try:
-            usernames = to_usernames(arg)
+            usernames = parse_twitch_usernames(usernames_text)
         except NicknameExtractionError as e:
             logger.opt(exception=e).warning(e.message)
             await self.bus.publish(UserError(login=e.nickname, exception=e.message))
@@ -143,8 +140,8 @@ class TelegramWatchlistBot:
             await self.bus.publish(*events)
 
     async def _cmd_list(self, message: types.Message) -> None:
-        ans = self.commands.get_list().split("\n")
-        for batch in batched(ans, n=100):
+        message_lines = self.commands.get_list().split("\n")
+        for batch in batched(message_lines, n=100):
             await message.answer(
                 "\n".join(batch),
                 parse_mode=ParseMode.HTML,
