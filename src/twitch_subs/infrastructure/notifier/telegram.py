@@ -46,7 +46,20 @@ class TelegramNotifier(NotifierProtocol):
         await self.send_message("🟢 <b>Twitch Subs Watcher</b> запущен. Мониторю.")
 
     async def notify_about_stop(self) -> None:
-        await self.send_message("🔴 <b>Twitch Subs Watcher</b> остановлен.")
+        async with self._lock:
+            flush_task = self._flush_task
+            self._flush_task = None
+            self._buffer[(True, False)].append(
+                "🔴 <b>Twitch Subs Watcher</b> остановлен."
+            )
+            buffers_to_send = self._buffer
+            self._buffer = defaultdict(list)
+
+        if flush_task is not None:
+            flush_task.cancel()
+            await asyncio.gather(flush_task, return_exceptions=True)
+
+        await self._send_buffers(buffers_to_send)
 
     async def notify_report(
         self,
@@ -87,7 +100,10 @@ class TelegramNotifier(NotifierProtocol):
                 self._flush_task = asyncio.create_task(self._flush_buffer_later())
 
     async def _flush_buffer_later(self) -> None:
-        await asyncio.sleep(self._flush_timeout)
+        try:
+            await asyncio.sleep(self._flush_timeout)
+        except asyncio.CancelledError:
+            return
 
         async with self._lock:
             # Take a snapshot of the current buffer and reset it
@@ -95,20 +111,37 @@ class TelegramNotifier(NotifierProtocol):
             self._buffer = defaultdict(list)
             self._flush_task = None
 
+        await self._send_buffers(buffers_to_send)
+
+    async def _send_buffers(
+        self, buffers_to_send: dict[tuple[bool, bool], list[str]]
+    ) -> None:
         for (preview, notif), texts in buffers_to_send.items():
             # Send in batches of 100 to avoid exceeding TG limits
             for batch in batched(texts, n=100):
-                joined_text = "\n".join(batch)
-                try:
-                    await self.bot.send_message(
-                        chat_id=self.chat_id,
-                        text=joined_text,
-                        disable_web_page_preview=preview,
-                        disable_notification=notif,
-                    )
-                except Exception as e:
-                    logger.opt(exception=e).exception(
-                        "[TelegramNotifier] Failed to send message to chat={} (exception: {})",
-                        self.chat_id,
-                        e,
-                    )
+                await self._send_batch(
+                    "\n".join(batch),
+                    disable_web_page_preview=preview,
+                    disable_notification=notif,
+                )
+
+    async def _send_batch(
+        self,
+        text: str,
+        *,
+        disable_web_page_preview: bool,
+        disable_notification: bool,
+    ) -> None:
+        try:
+            await self.bot.send_message(
+                chat_id=self.chat_id,
+                text=text,
+                disable_web_page_preview=disable_web_page_preview,
+                disable_notification=disable_notification,
+            )
+        except Exception as e:
+            logger.opt(exception=e).exception(
+                "[TelegramNotifier] Failed to send message to chat={} (exception: {})",
+                self.chat_id,
+                e,
+            )

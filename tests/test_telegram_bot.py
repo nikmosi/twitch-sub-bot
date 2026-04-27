@@ -180,10 +180,19 @@ async def test_notifier_notify_start_and_stop() -> None:
     await notifier.notify_about_start()
     await notifier.notify_about_stop()
 
-    if notifier._flush_task:
-        await notifier._flush_task
+    assert len(bot.sent) == 1
+
+
+@pytest.mark.asyncio
+async def test_notifier_notify_about_stop_flushes_before_return() -> None:
+    bot = StubBot()
+    notifier = TelegramNotifier(bot, "chat")
+    notifier._flush_timeout = 0
+
+    await notifier.notify_about_stop()
 
     assert len(bot.sent) == 1
+    assert notifier._flush_task is None
 
 
 @pytest.mark.asyncio
