@@ -9,6 +9,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from loguru import logger
 
+
 from twitch_subs.application.ports import EventBus
 from twitch_subs.application.watchlist_service import WatchlistService
 from twitch_subs.domain.events import DomainEvent, UserAdded, UserError, UserRemoved
@@ -16,6 +17,8 @@ from twitch_subs.domain.models import TwitchUsername
 from twitch_subs.infrastructure.error import NicknameExtractionError
 
 from .filters import ChatIdFilter
+
+logger = logger.bind(module=__name__)
 
 
 def parse_twitch_usernames(text: str) -> list[str]:

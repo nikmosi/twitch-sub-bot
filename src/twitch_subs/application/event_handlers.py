@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from loguru import logger
 
+
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -20,6 +21,8 @@ from twitch_subs.domain.events import (
     UserError,
     UserRemoved,
 )
+
+logger = logger.bind(module=__name__)
 
 
 def register_notification_handlers(

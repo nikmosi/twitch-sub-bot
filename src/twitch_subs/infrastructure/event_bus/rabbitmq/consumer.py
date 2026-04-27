@@ -26,7 +26,6 @@ from twitch_subs.infrastructure.error import ConsumerShutdownError
 from twitch_subs.infrastructure.error_utils import log_and_wrap
 from twitch_subs.infrastructure.event_bus.rabbitmq.utils import routing_key_from_type
 
-LOGGER = logger
 
 T = TypeVar("T", bound=DomainEvent)
 
@@ -80,7 +79,7 @@ class Consumer:
             try:
                 await asyncio.wait_for(self.stop(), timeout=2)
             except (asyncio.TimeoutError, GeneratorExit):
-                LOGGER.debug(
+                logger.debug(
                     "GeneratorExit during consumer cleanup; quick-stop suppressed."
                 )
             except Exception as exc:
@@ -92,9 +91,9 @@ class Consumer:
             return
 
         if exc_type:
-            LOGGER.opt(exception=exc).error("exception in Consumer.__aexit__")
+            logger.opt(exception=exc).error("exception in Consumer.__aexit__")
             if tb is not None:
-                LOGGER.opt(exception=exc).trace(tb)
+                logger.opt(exception=exc).trace(tb)
 
         # В обычном кейсе имеет смысл всё-таки закрыть consumer
         await self.stop()
@@ -122,7 +121,7 @@ class Consumer:
                         self._queue, "_channel", None
                     )
                     if channel is None or getattr(channel, "is_closed", False):
-                        LOGGER.debug(
+                        logger.debug(
                             "[RabbitMQ-Consumer] Channel already closed; skipping queue cancel for tag={}",
                             self._consumer_tag,
                         )
@@ -132,12 +131,12 @@ class Consumer:
                             timeout=self._stop_timeout,
                         )
                 except ChannelInvalidStateError:
-                    LOGGER.debug(
+                    logger.debug(
                         "[RabbitMQ-Consumer] Channel invalid/closed during queue cancel (suppressed). tag={}",
                         self._consumer_tag,
                     )
                 except asyncio.TimeoutError:
-                    LOGGER.warning(
+                    logger.warning(
                         "[RabbitMQ-Consumer] Timeout while cancelling the queue consumer (tag={})",
                         self._consumer_tag,
                     )
@@ -162,11 +161,11 @@ class Consumer:
                         self._channel.close(), timeout=self._stop_timeout
                     )
                 except ChannelInvalidStateError:
-                    LOGGER.debug(
+                    logger.debug(
                         "[RabbitMQ-Consumer] Channel already invalid/closed on close request (suppressed)"
                     )
                 except asyncio.TimeoutError:
-                    LOGGER.warning("[RabbitMQ-Consumer] Timeout while closing channel.")
+                    logger.warning("[RabbitMQ-Consumer] Timeout while closing channel.")
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -224,7 +223,7 @@ class Consumer:
             event_name = data.get("name")
             event_type = self._types_by_name.get(event_name)
             if event_type is None:
-                LOGGER.warning(
+                logger.warning(
                     "[RabbitMQ-Consumer] Skipping unknown event: {} (no handler registered)",
                     event_name,
                 )

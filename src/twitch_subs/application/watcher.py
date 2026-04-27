@@ -6,6 +6,7 @@ from collections.abc import Sequence
 import httpx
 from loguru import logger
 
+
 from twitch_subs.application.error import WatcherRunError
 from twitch_subs.application.logins import LoginsProvider
 from twitch_subs.domain.events import (
@@ -22,6 +23,8 @@ from .ports import (
     SubscriptionStateRepo,
     TwitchClientProtocol,
 )
+
+logger = logger.bind(module=__name__)
 
 
 class Watcher:

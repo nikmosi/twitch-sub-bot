@@ -9,7 +9,10 @@ from typing import Any, ParamSpec, TypeVar
 
 from loguru import logger
 
+
 from twitch_subs.errors import AppError
+
+logger = logger.bind(module=__name__)
 
 P = ParamSpec("P")
 R = TypeVar("R")

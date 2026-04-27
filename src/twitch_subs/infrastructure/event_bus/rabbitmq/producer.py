@@ -14,7 +14,6 @@ from aio_pika.abc import (
     AbstractExchange,
     AbstractRobustConnection,
 )
-from loguru import logger
 
 from twitch_subs.domain.events import DomainEvent
 from twitch_subs.infrastructure.error import ProducerShutdownError
@@ -24,7 +23,6 @@ from twitch_subs.infrastructure.event_bus.rabbitmq.utils import (
     serialize_event,
 )
 
-LOGGER = logger
 
 T = TypeVar("T", bound=DomainEvent)
 

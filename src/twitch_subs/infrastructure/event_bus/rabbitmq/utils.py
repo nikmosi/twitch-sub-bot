@@ -5,11 +5,9 @@ from __future__ import annotations
 import re
 from typing import Any, TypeVar
 
-from loguru import logger
 
 from twitch_subs.domain.events import DomainEvent
 
-LOGGER = logger
 
 T = TypeVar("T", bound=DomainEvent)
 _EVENT_VERSION = 1

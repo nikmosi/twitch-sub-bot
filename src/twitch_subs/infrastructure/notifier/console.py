@@ -7,9 +7,12 @@ from itertools import batched
 
 from loguru import logger
 
+
 from twitch_subs.application.ports import NotifierProtocol
 from twitch_subs.domain.models import BroadcasterType, SubState
 from twitch_subs.infrastructure.error import NotificationDeliveryError
+
+logger = logger.bind(module=__name__)
 
 _TAG_RE = re.compile(r"</?b>|</?code>|</?i>|</?u>")
 _LINK_RE = re.compile(r'<a\s+href="([^"]+)">([^<]+)</a>')

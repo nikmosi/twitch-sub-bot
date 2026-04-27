@@ -9,8 +9,11 @@ import httpx
 from aiolimiter import AsyncLimiter
 from loguru import logger
 
+
 from twitch_subs.application.ports import TwitchClientProtocol
 from twitch_subs.domain.models import BroadcasterType, TwitchAppCreds, UserRecord
+
+logger = logger.bind(module=__name__)
 
 TWITCH_API = "https://api.twitch.tv"
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"

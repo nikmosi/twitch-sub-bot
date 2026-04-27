@@ -5,6 +5,8 @@ from aiogram.filters import Filter
 from aiogram.types import Message
 from loguru import logger
 
+logger = logger.bind(module=__name__)
+
 
 class ChatIdFilter(Filter):
     def __init__(self, chat_id: str):

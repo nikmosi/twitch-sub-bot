@@ -14,6 +14,7 @@ from dependency_injector import providers
 from dependency_injector.wiring import Provide, inject
 from loguru import logger
 
+
 from twitch_subs.application.event_handlers import register_notification_handlers
 from twitch_subs.application.ports import (
     EventBus,
@@ -32,8 +33,11 @@ from twitch_subs.infrastructure.event_bus.rabbitmq.producer import Producer
 from twitch_subs.infrastructure.logins_provider import WatchlistLoginsProvider
 from twitch_subs.infrastructure.telegram.bot import TelegramWatchlistBot
 
+
 from .config import Settings
 from .container import AppContainer, build_container
+
+logger = logger.bind(module=__name__)
 
 T = TypeVar("T")
 

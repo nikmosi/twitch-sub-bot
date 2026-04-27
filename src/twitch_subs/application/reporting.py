@@ -10,6 +10,7 @@ from typing import Any, Awaitable, Mapping, ParamSpec, Protocol, cast
 import aiocron
 from loguru import logger
 
+
 from twitch_subs.application.ports import (
     EventBus,
     NotifierProtocol,
@@ -17,6 +18,8 @@ from twitch_subs.application.ports import (
 )
 from twitch_subs.domain.events import DayChanged, LoopChecked, LoopCheckFailed
 from twitch_subs.domain.models import SubState
+
+logger = logger.bind(module=__name__)
 
 
 @dataclass(slots=True)

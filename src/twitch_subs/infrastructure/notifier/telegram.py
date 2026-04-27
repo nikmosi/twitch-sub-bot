@@ -8,8 +8,11 @@ from itertools import batched, groupby
 from aiogram import Bot
 from loguru import logger
 
+
 from twitch_subs.application.ports import NotifierProtocol
 from twitch_subs.domain.models import BroadcasterType, SubState
+
+logger = logger.bind(module=__name__)
 
 
 class TelegramNotifier(NotifierProtocol):
