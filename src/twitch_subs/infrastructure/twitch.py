@@ -90,7 +90,11 @@ class TwitchClient(TwitchClientProtocol):
                 path, params=params, headers=self._auth_headers()
             )
         if response.status_code == 401:
-            logger.warning("Twitch 401: refreshing token and retrying once…")
+            logger.warning(
+                "[TwitchAPI] Received 401 Unauthorized for path='{}' with params={}. Attempting app token refresh and single retry...",
+                path,
+                params,
+            )
             await self._refresh_app_token()
             response = await self._http.get(
                 path, params=params, headers=self._auth_headers()
@@ -115,7 +119,10 @@ class TwitchClient(TwitchClientProtocol):
             await self._refresh_app_token()
 
     async def _refresh_app_token(self) -> None:
-        logger.info("Refreshing Twitch app token…")
+        logger.info(
+            "[TwitchAPI] Refreshing Twitch app access token for client_id={}",
+            self.client_id,
+        )
         response = await self._http.post(
             TWITCH_TOKEN_URL,
             data={

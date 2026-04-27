@@ -45,7 +45,7 @@ class Watcher:
         users = await self.twitch.get_users_by_login(logins)
 
         if not users:
-            logger.warning("got empty users list")
+            logger.warning("[Watcher] No users found for requested logins: {}", logins)
             return []
 
         return users
@@ -132,7 +132,9 @@ class Watcher:
                 try:
                     await self.run_once(all_logins)
                 except Exception as e:
-                    logger.opt(exception=e).exception("Run once failed", e)
+                    logger.opt(exception=e).exception(
+                        "[Watcher] run_once failed for logins={}: {}", all_logins, e
+                    )
                     await self.event_bus.publish(
                         LoopCheckFailed(logins=tuple(all_logins), error=str(e))
                     )
@@ -142,5 +144,5 @@ class Watcher:
                 except TimeoutError:
                     pass
         finally:
-            logger.info("notify_about_stop")
+            logger.info("[Watcher] Notifying about watcher stop event to notifier.")
             await asyncio.shield(self.notifier.notify_about_stop())

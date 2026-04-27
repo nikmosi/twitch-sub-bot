@@ -113,7 +113,9 @@ class DayChangeScheduler:
             return
         job = self._crontab_factory(self.cron, func=self._emit, start=True)
         self._cron_job = job
-        logger.info("started DayChangeScheduler")
+        logger.info(
+            "[DayChangeScheduler] Scheduled reporting started (cron: {})", self.cron
+        )
 
     def stop(self) -> None:
         if self._cron_job is None:

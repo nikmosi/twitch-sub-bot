@@ -123,7 +123,8 @@ class Consumer:
                     )
                     if channel is None or getattr(channel, "is_closed", False):
                         LOGGER.debug(
-                            "stop: queue channel already closed; skipping cancel()"
+                            "[RabbitMQ-Consumer] Channel already closed; skipping queue cancel for tag={}",
+                            self._consumer_tag,
                         )
                     else:
                         await asyncio.wait_for(
@@ -132,10 +133,14 @@ class Consumer:
                         )
                 except ChannelInvalidStateError:
                     LOGGER.debug(
-                        "stop: channel invalid state while cancelling consumer (suppressed)"
+                        "[RabbitMQ-Consumer] Channel invalid/closed during queue cancel (suppressed). tag={}",
+                        self._consumer_tag,
                     )
                 except asyncio.TimeoutError:
-                    LOGGER.warning("stop: timeout while cancelling consumer")
+                    LOGGER.warning(
+                        "[RabbitMQ-Consumer] Timeout while cancelling the queue consumer (tag={})",
+                        self._consumer_tag,
+                    )
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -157,9 +162,11 @@ class Consumer:
                         self._channel.close(), timeout=self._stop_timeout
                     )
                 except ChannelInvalidStateError:
-                    LOGGER.debug("stop: channel already invalid/closed (suppressed)")
+                    LOGGER.debug(
+                        "[RabbitMQ-Consumer] Channel already invalid/closed on close request (suppressed)"
+                    )
                 except asyncio.TimeoutError:
-                    LOGGER.warning("stop: timeout while closing channel")
+                    LOGGER.warning("[RabbitMQ-Consumer] Timeout while closing channel.")
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
@@ -217,7 +224,10 @@ class Consumer:
             event_name = data.get("name")
             event_type = self._types_by_name.get(event_name)
             if event_type is None:
-                LOGGER.warning("skip unknown event {}", event_name)
+                LOGGER.warning(
+                    "[RabbitMQ-Consumer] Skipping unknown event: {} (no handler registered)",
+                    event_name,
+                )
                 return
 
             event = event_type.model_validate(

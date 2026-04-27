@@ -101,7 +101,9 @@ class SqliteSubscriptionStateRepository(SubscriptionStateRepo):
         return SubState(
             login=row["login"],
             broadcaster_type=BroadcasterType(row["status"]),
-            since=datetime.fromisoformat(row["since"]) if row["since"] else None,
+            since=datetime.fromisoformat(row["since"])
+            if row["since"]
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(row["updated_at"]),
         )
 

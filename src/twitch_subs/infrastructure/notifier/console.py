@@ -84,7 +84,10 @@ class ConsoleNotifier(NotifierProtocol):
             # Use info for human-visible notifications
             logger.info("\n" + plain if "\n" in plain else plain)
         except Exception as e:
-            logger.opt(exception=e).exception("Console notify failed")
+            logger.opt(exception=e).exception(
+                "[ConsoleNotifier] Failed to print notification message (exception: {})",
+                e,
+            )
             raise NotificationDeliveryError(
                 message="Console notification failed", context={"error": repr(e)}
             ) from e

@@ -105,5 +105,7 @@ class TelegramNotifier(NotifierProtocol):
                     )
                 except Exception as e:
                     logger.opt(exception=e).exception(
-                        "Telegram send failed in background worker"
+                        "[TelegramNotifier] Failed to send message to chat={} (exception: {})",
+                        self.chat_id,
+                        e,
                     )

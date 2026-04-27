@@ -30,7 +30,11 @@ def register_notification_handlers(
     """Register default notification and logging handlers on *event_bus*."""
 
     async def log_user_error(event: UserError) -> None:
-        logger.error(f"{event}")
+        logger.error(
+            "[EventHandler] User error event: login={}, exception={}",
+            event.login,
+            event.exception,
+        )
 
     async def notify_about_error(event: UserError) -> None:
         await notifier.send_message(
@@ -53,20 +57,28 @@ def register_notification_handlers(
         await notifier.notify_about_change(event.login, event.current_state)
 
     async def log_once_check(event: OnceChecked) -> None:
-        logger.debug(  # type: ignore[call-arg]
-            f"checked {event.login} with status {event.current_state.value}"
+        logger.debug(
+            "[EventHandler] Login checked: login={}, status={}",
+            event.login,
+            event.current_state.value,
         )
 
     async def log_loop_check_debug(event: LoopChecked) -> None:
-        logger.debug(  # type: ignore[call-arg]
-            f"checked {event.found_logins=} {event.missing_logins=}"
+        logger.debug(
+            "[EventHandler] Loop checked: found_logins={}, missing_logins={}",
+            event.found_logins,
+            event.missing_logins,
         )
 
     async def log_loop_check_info(_: LoopChecked) -> None:
-        logger.info("loop checked")
+        logger.info("[EventHandler] Loop check completed.")
 
     async def log_subscribable_change(event: UserBecameSubscribable) -> None:
-        logger.info(f"{event.login} become {event.current_state.value}")  # type: ignore[call-arg]
+        logger.info(
+            "[EventHandler] User {} has changed state to {}",
+            event.login,
+            event.current_state.value,
+        )
 
     event_bus.subscribe(UserAdded, notify_about_add)
     event_bus.subscribe(UserRemoved, notify_about_remove)

@@ -26,7 +26,11 @@ def log_and_wrap(
     context: dict[str, Any] | None = None,
 ) -> AppError:
     formatted_tb = _format_tail(exc)
-    logger.opt(exception=exc).exception(formatted_tb)
+    logger.opt(exception=exc).exception(
+        "[ErrorUtils] Exception wrapped into {}: {}",
+        module_exc_cls.__name__,
+        formatted_tb,
+    )
     wrapped = module_exc_cls(str(exc), context=context or {})
     raise wrapped from exc
 
@@ -47,7 +51,7 @@ def wrap_exceptions(
                     raise
                 except Exception as exc:  # pragma: no cover - thin wrapper
                     formatted_tb = _format_tail(exc)
-                    logger.opt(exception=exc).exception("%s", formatted_tb)
+                    logger.opt(exception=exc).exception("{}", formatted_tb)
                     raise module_exc_cls(str(exc)) from exc
 
             return async_wrapper  # type: ignore[return-value]
@@ -58,7 +62,7 @@ def wrap_exceptions(
                 return func(*args, **kwargs)
             except Exception as exc:  # pragma: no cover - thin wrapper
                 formatted_tb = _format_tail(exc)
-                logger.opt(exception=exc).exception("%s", formatted_tb)
+                logger.opt(exception=exc).exception("{}", formatted_tb)
                 raise module_exc_cls(str(exc)) from exc
 
         return sync_wrapper  # type: ignore[return-value]
