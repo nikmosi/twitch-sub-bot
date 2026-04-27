@@ -1,6 +1,7 @@
 import asyncio
 from collections.abc import Iterable, Sequence
 
+import httpx
 import pytest
 
 from twitch_subs.application.error import WatcherRunError
@@ -224,6 +225,28 @@ async def test_run_once_reports_found_and_missing_users() -> None:
     assert len(loop_checked_events) == 1
     assert tuple(loop_checked_events[0].found_logins) == ("foo",)
     assert tuple(loop_checked_events[0].missing_logins) == ("bar",)
+
+
+@pytest.mark.asyncio
+async def test_run_once_timeout_publishes_only_failure_event() -> None:
+    twitch = FakeTwitch({"foo": None})
+    repo = FakeRepo()
+    bus = InMemoryEventBus()
+    _, _, loop_checked_events, failed_events = await _record_events(bus)
+    watcher = Watcher(twitch, FakeNotifier(), repo, bus)
+
+    async def raise_timeout(logins: Sequence[str]) -> list[UserRecord]:
+        raise httpx.TimeoutException("boom")
+
+    watcher.check_logins = raise_timeout  # type: ignore[assignment]
+
+    await watcher.run_once(["foo"])
+
+    assert len(failed_events) == 1
+    assert failed_events[0].logins == ["foo"]
+    assert failed_events[0].error == "boom"
+    assert loop_checked_events == []
+    assert repo.set_many_calls == []
 
 
 @pytest.mark.asyncio

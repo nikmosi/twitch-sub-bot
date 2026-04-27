@@ -98,18 +98,17 @@ class Watcher:
         return current_states
 
     async def run_once(self, logins: Sequence[str]) -> None:
-        found_logins: tuple[str, ...] = ()
-        missing_logins: tuple[str, ...] = ()
         try:
             users = await self.check_logins(logins)
         except httpx.TimeoutException as e:
             await self.event_bus.publish(LoopCheckFailed(logins=logins, error=str(e)))
-        else:
-            found_logins = tuple(user.login for user in users)
-            found_set = set(found_logins)
-            missing_logins = tuple(login for login in logins if login not in found_set)
-            states = await self._build_current_states(users)
-            self.state_repo.set_many(list(states))
+            return
+
+        found_logins = tuple(user.login for user in users)
+        found_set = set(found_logins)
+        missing_logins = tuple(login for login in logins if login not in found_set)
+        states = await self._build_current_states(users)
+        self.state_repo.set_many(list(states))
 
         await self.event_bus.publish(
             LoopChecked(
