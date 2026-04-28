@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Sequence
 
 from pydantic import BaseModel, ConfigDict
 
@@ -44,7 +45,7 @@ class TwitchUsername:
         return cls(raw.strip())
 
     @classmethod
-    def parse_many(cls, raw_values: Iterable[str]) -> list[TwitchUsername]:
+    def parse_many(cls, raw_values: Iterable[str]) -> Sequence[TwitchUsername]:
         return [cls.parse(raw) for raw in raw_values]
 
     @classmethod
@@ -55,7 +56,7 @@ class TwitchUsername:
         return cls(candidate)
 
     @classmethod
-    def parse_from_text(cls, text: str) -> list[TwitchUsername]:
+    def parse_from_text(cls, text: str) -> Sequence[TwitchUsername]:
         return [cls.parse_from_token(token) for token in text.split()]
 
 

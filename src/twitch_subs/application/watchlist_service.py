@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Sequence
+
 from .ports import WatchlistRepository
 
 
@@ -26,6 +28,6 @@ class WatchlistService:
         """
         return self.repo.remove(login)
 
-    def list(self) -> list[str]:
+    def list(self) -> Sequence[str]:
         """Return all logins sorted alphabetically."""
         return self.repo.get_list()
