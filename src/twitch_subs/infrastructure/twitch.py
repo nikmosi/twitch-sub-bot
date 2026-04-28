@@ -122,10 +122,7 @@ class TwitchClient(TwitchClientProtocol):
             await self._refresh_app_token()
 
     async def _refresh_app_token(self) -> None:
-        logger.info(
-            "[TwitchAPI] Refreshing Twitch app access token for client_id={}",
-            self.client_id,
-        )
+        logger.info("[TwitchAPI] Refreshing Twitch app access token.")
         response = await self._http.post(
             TWITCH_TOKEN_URL,
             data={

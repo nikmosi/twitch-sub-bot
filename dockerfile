@@ -38,9 +38,10 @@ COPY --from=builder /app /app
 # Use non‑root user for execution
 USER "${APP_UID}:${APP_GID}"
 
-# Healthcheck – ensure the CLI can be invoked
+# Healthcheck must stay cheap; invoking the CLI boots the app container and
+# can exhaust memory in small deployments.
 HEALTHCHECK --interval=30s --timeout=3s \
-  CMD /app/.venv/bin/python src/main.py --help || exit 1
+  CMD grep -qa "src/main.py" /proc/1/cmdline || exit 1
 
 # Default entrypoint (same as original)
 ENTRYPOINT ["/app/.venv/bin/python", "src/main.py"]

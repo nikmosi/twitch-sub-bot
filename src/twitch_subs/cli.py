@@ -141,6 +141,8 @@ async def _add(
 @inject
 async def _list_cmd(
     repo: WatchlistRepository = Provide[AppContainer.watchlist_repo],
+    sub_state_repo: SubscriptionStateRepo = Provide[AppContainer.sub_state_repo],
+    show_status: bool = False,
 ) -> int:
     watchlist_logins = repo.get_list()
     if not watchlist_logins:
@@ -149,7 +151,14 @@ async def _list_cmd(
         )
         raise typer.Exit(0)
     for login in watchlist_logins:
-        typer.echo(login)
+        if show_status:
+            state = sub_state_repo.get_sub_state(login)
+            if state is None:
+                typer.echo(f"{login} (no status)")
+            else:
+                typer.echo(f"{login} ({state.broadcaster_type.value})")
+        else:
+            typer.echo(login)
     return 0
 
 
@@ -351,8 +360,12 @@ def add(
 
 
 @app.command("list", help="List Twitch usernames in watchlist")
-def list_cmd() -> int:
-    return asyncio.run(entry_point(_list_cmd()))
+def list_cmd(
+    status: bool = typer.Option(
+        False, "--status", "-s", help="Show subscription status"
+    ),
+) -> int:
+    return asyncio.run(entry_point(_list_cmd(show_status=status)))
 
 
 @state_app.command("get", help="Get stored state for LOGIN")

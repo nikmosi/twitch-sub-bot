@@ -1,11 +1,13 @@
 # Twitch Subs Watcher
 
 ## Overview
+
 **twitch_subs** is a Twitch subscriptions and watchlist tracker that sends
 notifications to Telegram when a channel becomes subscribable. It ships with a
 Typer-powered CLI and a small Telegram bot for watchlist management.
 
 ## Features
+
 - Poll the Twitch Helix API and track broadcaster type changes.
 - Persist the watchlist in SQLite and expose CRUD operations via CLI or bot.
 - Persist per-login subscription state in the same SQLite database
@@ -15,6 +17,7 @@ Typer-powered CLI and a small Telegram bot for watchlist management.
 - Gracefully handle SIGINT/SIGTERM and persist state between runs.
 
 ## Architecture
+
 The project follows a layered design:
 
 - **domain** – core models, ports and domain exceptions.
@@ -24,10 +27,13 @@ The project follows a layered design:
 - **cli** – entry points implemented with [Typer](https://typer.tiangolo.com/).
 
 ## Technologies
+
 Python · uv · Typer · SQLite · Telegram Bot API · Twitch API · Docker
 
 ## Installation & Usage
+
 ### Configuration
+
 Environment variables (or a `.env` file) control credentials and database
 location:
 
@@ -50,6 +56,7 @@ SQLite data for Docker Compose is stored in the named volume `bot-data`, so the
 container does not depend on host-directory ownership for `/app/var`.
 
 ### Run locally with uv
+
 Manage the watchlist:
 
 ```bash
@@ -83,6 +90,12 @@ To fail the run when coverage drops below the enforced threshold the command
 already configures `pytest-cov` with `--cov-fail-under=95` in `pyproject.toml`.
 An XML coverage report is produced at `coverage.xml` for CI integrations.
 
+## TODO
+
+- Сделать чтобы в list можно было добавить аргумент и тогда выводилось бы со статусом.
+- Сделать возможность получить статус конкретного login'а
+
 ## License
+
 Released under the terms of the GNU General Public License v3.0. See
 [LICENSE](LICENSE) for details.
