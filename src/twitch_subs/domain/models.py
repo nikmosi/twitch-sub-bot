@@ -29,7 +29,7 @@ class TwitchUsername:
 
     _USERNAME_RE = re.compile(r"^[A-Za-z0-9_]{3,25}$", re.ASCII)
     _URL_RE = re.compile(
-        r"^https?://(?:(?:www|m)\.)?twitch\.tv/(?P<login>[A-Za-z0-9_]{3,25})/?$",
+        r"^https?://(?:(?:www|m)\.)?twitch\.tv/(?P<login>[A-Za-z0-9_]{3,25})/?",
         re.ASCII,
     )
 
@@ -51,7 +51,7 @@ class TwitchUsername:
     @classmethod
     def parse_from_token(cls, token: str) -> TwitchUsername:
         candidate = token.strip()
-        if match := cls._URL_RE.fullmatch(candidate):
+        if match := cls._URL_RE.match(candidate):
             candidate = match.group("login")
         return cls(candidate)
 
