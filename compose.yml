@@ -12,11 +12,17 @@ services:
     user: "${APP_UID:-10123}:${APP_GID:-10123}"
     command: ["watch"]
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     volumes:
       - bot-data:/app/var:rw
       - ./src/:/app/src:rw
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
     environment:
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
       PYTHONUNBUFFERED: "1"
@@ -43,6 +49,11 @@ services:
       RABBITMQ_DEFAULT_USER: guest
       RABBITMQ_DEFAULT_PASS: guest
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmqctl", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     logging:
       driver: local
       options:
