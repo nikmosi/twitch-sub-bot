@@ -81,7 +81,7 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
 
     class CompatibleWatchlistRepository(SqliteWatchlistRepository):
         def get_list(self) -> list[str]:
-            return super().list()
+            return super().get_list()
 
     class DummyProducer:
         async def __aenter__(self) -> "DummyProducer":
@@ -155,7 +155,7 @@ def test_add_list_remove_happy(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     assert res.exit_code == 0
     assert res.output.strip() == "✅ Added foo"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
-    assert repo.list() == ["foo"]
+    assert repo.get_list() == ["foo"]
     res = run(["list"], monkeypatch, db)
     assert res.exit_code == 0
     assert res.output.strip() == "foo"
@@ -172,7 +172,7 @@ def test_idempotent_add(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     run(["add", "foo", "-n"], monkeypatch, db)
     run(["add", "foo", "-n"], monkeypatch, db)
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
-    assert repo.list() == ["foo"]
+    assert repo.get_list() == ["foo"]
 
 
 def test_remove_missing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):

@@ -8,7 +8,7 @@ from twitch_subs.infrastructure.repository_sqlite import SqliteWatchlistReposito
 
 class CompatibleWatchlistRepository(SqliteWatchlistRepository):
     def get_list(self) -> list[str]:
-        return super().list()
+        return super().get_list()
 
 
 def test_watchlist_service_crud(tmp_path: Path) -> None:

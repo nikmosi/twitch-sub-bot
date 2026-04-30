@@ -65,7 +65,7 @@ class DummyDispatcher:
 
 class CompatibleWatchlistRepository(SqliteWatchlistRepository):
     def get_list(self) -> list[str]:
-        return super().list()
+        return super().get_list()
 
 
 def make_service(tmp_path: Path) -> WatchlistService:

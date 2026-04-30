@@ -16,14 +16,14 @@ def test_add_is_idempotent_and_sorted(tmp_path: Path) -> None:
     repo.add("b")
     repo.add("a")
     repo.add("a")
-    assert repo.list() == ["a", "b"]
+    assert repo.get_list() == ["a", "b"]
 
 
 def test_remove_persistence(tmp_path: Path) -> None:
     db = tmp_path / "test.db"
     repo = SqliteWatchlistRepository(f"sqlite:///{db}")
     repo.add("bar")
-    assert repo.list() == ["bar"]
+    assert repo.get_list() == ["bar"]
     assert repo.remove("bar") is True
     assert repo.remove("bar") is False
 
