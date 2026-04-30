@@ -79,10 +79,6 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
 
     stub_bus = StubEventBus()
 
-    class CompatibleWatchlistRepository(SqliteWatchlistRepository):
-        def get_list(self) -> list[str]:
-            return super().get_list()
-
     class DummyProducer:
         async def __aenter__(self) -> "DummyProducer":
             return self
@@ -107,7 +103,7 @@ def stubbed_container(monkeypatch: pytest.MonkeyPatch) -> StubEventBus:
         container = container_mod.AppContainer()
         container.container_config.from_pydantic(settings)
 
-        repo = CompatibleWatchlistRepository(settings.database_url)
+        repo = SqliteWatchlistRepository(settings.database_url)
 
         container.rabbit_conn.override(providers.Resource(_yield, object()))
         container.event_bus_factory.override(providers.Resource(_yield, stub_bus))
