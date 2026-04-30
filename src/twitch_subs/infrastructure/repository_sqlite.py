@@ -70,14 +70,11 @@ class SqliteWatchlistRepository(WatchlistRepository):
             session.commit()
             return result.rowcount > 0
 
-    def list(self) -> list[str]:
+    def get_list(self) -> list[str]:
         with Session(self.engine) as session:
             stmt = select(watchlist.c.login).order_by(watchlist.c.login.asc())
             rows = session.execute(stmt).scalars().all()
             return list(rows)
-
-    def get_list(self) -> list[str]:
-        return self.list()
 
     def exists(self, login: str) -> bool:
         with Session(self.engine) as session:
