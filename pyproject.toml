@@ -8,15 +8,15 @@ dependencies = [
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "pydantic>=2.0",
-    "pydantic-settings>=2.0",
+    "pydantic-settings>=2.14.0",
     "python-dotenv>=1.1.1",
-    "typer>=0.12.3",
-    "aiogram>=3.22.0",
-    "aio-pika>=9.4.1",
-    "sqlalchemy>=2.0",
+    "typer>=0.25.1",
+    "aiogram>=3.27.0",
+    "aio-pika>=9.6.2",
+    "sqlalchemy>=2.0.49",
     "aiolimiter>=1.2.1",
     "aiocron>=1.8",
-    "dependency-injector>=4.48.2",
+    "dependency-injector>=4.49.0",
     "py2puml>=0.10.0",
 ]
 
@@ -72,11 +72,11 @@ exclude_lines = [
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=1.2.0",
-    "pytest-cov>=6.2.1",
+    "pytest-cov>=7.1.0",
   "pytest-timeout>=2.4.0",
   "pytest-xdist>=3.8.0",
-  "hypothesis>=6.112.2",
-  "ruff>=0.6.9",
+  "hypothesis>=6.152.4",
+  "ruff>=0.15.12",
 ]
 
 [tool.ruff]
